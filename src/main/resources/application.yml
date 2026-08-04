@@ -1,0 +1,33 @@
+server:
+  address: 0.0.0.0
+  port: 8080
+
+spring:
+  application:
+    name: backend-app-catalogo
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/app_catalogo?createDatabaseIfNotExist=true&serverTimezone=UTC}
+    username: ${DB_USERNAME:app_catalogo}
+    password: ${DB_PASSWORD:app_catalogo_dev}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
+  thymeleaf:
+    cache: false
+
+app:
+  admin:
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:admin}
+  sync:
+    push-batch-size: 100
+    pull-batch-size: 300
+    bootstrap-batch-size: 300
+

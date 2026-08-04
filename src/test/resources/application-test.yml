@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:catalogo;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      # Flyway creates the schema in tests. H2 exposes MySQL LONGTEXT as VARCHAR,
+      # so Hibernate type validation is left to the real MySQL profile.
+      ddl-auto: none
+  flyway:
+    enabled: true
+  thymeleaf:
+    cache: false
+
+app:
+  admin:
+    username: admin
+    password: admin
+  sync:
+    push-batch-size: 100
+    pull-batch-size: 300
+    bootstrap-batch-size: 300

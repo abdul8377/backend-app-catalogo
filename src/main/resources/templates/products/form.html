@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${editing ? 'Editar producto' : 'Nuevo producto'}"></title>
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+<body>
+<header class="topbar"><div><strong>App Catálogo</strong><span>Servidor local</span></div><nav><a class="active" th:href="@{/admin/products}">Productos</a></nav></header>
+<main class="container narrow">
+    <a class="back" th:href="@{/admin/products}">← Volver a productos</a>
+    <section class="page-heading"><div><p class="eyebrow">Catálogo central</p><h1 th:text="${editing ? 'Editar producto' : 'Nuevo producto'}"></h1><p>Al guardar se generará una nueva versión sincronizable.</p></div></section>
+    <form class="card product-form" method="post" th:object="${productForm}" th:action="${editing ? '/admin/products/' + productId : '/admin/products'}">
+        <input type="hidden" th:field="*{version}">
+        <div class="grid two">
+            <label>Código<input th:field="*{code}" required><small class="error" th:errors="*{code}"></small></label>
+            <label>Nombre<input th:field="*{name}" required><small class="error" th:errors="*{name}"></small></label>
+        </div>
+        <label>Descripción<textarea th:field="*{description}" rows="4"></textarea><small class="error" th:errors="*{description}"></small></label>
+        <div class="grid three">
+            <label>Empresa<input th:field="*{company}"></label>
+            <label>Marca<input th:field="*{brand}"></label>
+            <label>Categoría<input th:field="*{category}"></label>
+        </div>
+        <label>Estado<select th:field="*{status}"><option th:each="status : ${statuses}" th:value="${status}" th:text="${status}"></option></select></label>
+        <div class="form-actions"><a class="button" th:href="@{/admin/products}">Cancelar</a><button class="button primary" type="submit">Guardar producto</button></div>
+    </form>
+</main>
+</body>
+</html>

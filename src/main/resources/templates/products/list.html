@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Productos - App Catálogo</title>
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+<body>
+<header class="topbar">
+    <div><strong>App Catálogo</strong><span>Servidor local</span></div>
+    <nav><a class="active" th:href="@{/admin/products}">Productos</a><a th:href="@{/api/v1/sync/status}">Sincronización</a></nav>
+</header>
+<main class="container">
+    <section class="page-heading">
+        <div><p class="eyebrow">Administración</p><h1>Productos</h1><p>Los cambios guardados aquí se publican para todas las tablets.</p></div>
+        <a class="button primary" th:href="@{/admin/products/new}">Nuevo producto</a>
+    </section>
+    <div class="notice" th:if="${message}" th:text="${message}"></div>
+    <form class="search" method="get" th:action="@{/admin/products}">
+        <input name="query" th:value="${query}" placeholder="Buscar por nombre o código">
+        <button class="button" type="submit">Buscar</button>
+    </form>
+    <section class="card table-card">
+        <table>
+            <thead><tr><th>Código</th><th>Producto</th><th>Clasificación</th><th>Estado</th><th>Versión</th><th></th></tr></thead>
+            <tbody>
+            <tr th:each="product : ${products.content}">
+                <td class="mono" th:text="${product.code}"></td>
+                <td><strong th:text="${product.name}"></strong><small th:text="${product.description}"></small></td>
+                <td><span th:text="${product.brand}"></span><small th:text="${product.category}"></small></td>
+                <td><span class="badge" th:classappend="${product.status.name().toLowerCase()}" th:text="${product.status}"></span></td>
+                <td th:text="${product.version}"></td>
+                <td class="actions">
+                    <a th:href="@{/admin/products/{id}/edit(id=${product.id})}">Editar</a>
+                    <form th:if="${product.status.name() != 'INACTIVE' and product.status.name() != 'DELETED'}" method="post" th:action="@{/admin/products/{id}/deactivate(id=${product.id})}"><button type="submit">Desactivar</button></form>
+                </td>
+            </tr>
+            <tr th:if="${products.empty}"><td colspan="6" class="empty">Todavía no hay productos almacenados.</td></tr>
+            </tbody>
+        </table>
+    </section>
+    <div class="pagination" th:if="${products.totalPages > 1}">
+        <a th:if="${products.hasPrevious()}" th:href="@{/admin/products(query=${query},page=${products.number - 1})}">Anterior</a>
+        <span th:text="|Página ${products.number + 1} de ${products.totalPages}|"></span>
+        <a th:if="${products.hasNext()}" th:href="@{/admin/products(query=${query},page=${products.number + 1})}">Siguiente</a>
+    </div>
+</main>
+</body>
+</html>
