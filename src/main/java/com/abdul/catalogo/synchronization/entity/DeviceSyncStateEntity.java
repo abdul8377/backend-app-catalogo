@@ -24,9 +24,18 @@ public class DeviceSyncStateEntity {
     @Column(name = "last_pull_cursor", nullable = false)
     private long lastPullCursor;
 
+    @Column(name = "last_delivered_cursor", nullable = false)
+    private long lastDeliveredCursor;
+
+    @Column(name = "last_acknowledged_cursor", nullable = false)
+    private long lastAcknowledgedCursor;
+
     @Column(name = "last_push_at")
     private Instant lastPushAt;
 
     @Column(name = "last_pull_at")
     private Instant lastPullAt;
+
+    @Column(name = "last_error", length = 1000)
+    private String lastError;
 }

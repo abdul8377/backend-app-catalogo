@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.Set;
 
 public record SyncStatusResponse(
+        String serverId,
+        String apiContractVersion,
         long records,
         long changes,
         long processedEvents,

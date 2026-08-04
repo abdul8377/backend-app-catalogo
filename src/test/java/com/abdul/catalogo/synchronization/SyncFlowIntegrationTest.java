@@ -34,7 +34,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 class SyncFlowIntegrationTest {
-
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired SyncConflictRepository conflictRepository;
@@ -48,112 +47,94 @@ class SyncFlowIntegrationTest {
 
     @BeforeEach
     void registerDevice() throws Exception {
-        String response = mockMvc.perform(post("/api/v1/devices/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Tablet de pruebas\",\"platform\":\"android\"}"))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+        String pairing = mockMvc.perform(post("/admin/pairing-codes").with(user("admin").roles("ADMIN")).with(csrf()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String pairingCode = objectMapper.readTree(pairing).get("pairingCode").asText();
+        String response = mockMvc.perform(post("/api/v1/devices/register").contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("name", "Tablet de pruebas", "platform", "android",
+                                "pairingCode", pairingCode, "appVersion", "1.0.0", "apiContractVersion", "1.0"))))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         JsonNode registration = objectMapper.readTree(response);
-        deviceId = registration.get("deviceId").asText();
-        token = registration.get("token").asText();
+        deviceId = registration.get("deviceId").asText(); token = registration.get("token").asText();
     }
 
     @Test
     void synchronizesAllEntityTypesIdempotentlyAndPublishesWebProducts() throws Exception {
-        String companyId = UUID.randomUUID().toString();
-        String productId = UUID.randomUUID().toString();
-        String companyEventId = UUID.randomUUID().toString();
-        String productEventId = UUID.randomUUID().toString();
-
-        Map<String, Object> companyEvent = event(companyEventId, "COMPANY", companyId, 0,
+        long initialRecords = recordRepository.count();
+        long initialChanges = changeRepository.count();
+        long initialProducts = productRepository.count();
+        long initialConflicts = conflictRepository.count();
+        long initialEvents = eventRepository.count();
+        String companyId = UUID.randomUUID().toString(); String productId = UUID.randomUUID().toString();
+        Map<String, Object> companyEvent = event(UUID.randomUUID().toString(), "COMPANY", companyId, 0,
                 Map.of("syncId", companyId, "name", "Empresa Demo"));
-        Map<String, Object> productEvent = event(productEventId, "PRODUCT", productId, 0,
-                Map.of("productId", productId, "code", "TAB-001", "name", "Taladro de prueba",
-                        "company", "Empresa Demo", "brand", "Marca Demo", "category", "Taladros",
-                        "status", "ACTIVE", "variants", List.of()));
+        Map<String, Object> productPayload = productPayload(productId, "TAB-001", "Taladro de prueba");
+        Map<String, Object> productEvent = event(UUID.randomUUID().toString(), "PRODUCT", productId, 0, productPayload);
 
-        mockMvc.perform(authenticated(post("/api/v1/sync/push"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "deviceId", deviceId,
-                                "events", List.of(companyEvent, productEvent)))))
-                .andExpect(status().isOk())
+        mockMvc.perform(authenticated(post("/api/v1/sync/push")).contentType(MediaType.APPLICATION_JSON)
+                        .content(push(companyEvent, productEvent))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.results[0].status").value("ACCEPTED"))
                 .andExpect(jsonPath("$.results[1].status").value("ACCEPTED"));
+        mockMvc.perform(authenticated(post("/api/v1/sync/push")).contentType(MediaType.APPLICATION_JSON)
+                        .content(push(productEvent))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.results[0].status").value("ALREADY_PROCESSED"));
 
-        mockMvc.perform(authenticated(post("/api/v1/sync/push"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("deviceId", deviceId, "events", List.of(productEvent)))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.results[0].status").value("ALREADY_PROCESSED"))
-                .andExpect(jsonPath("$.results[0].serverVersion").value(1));
+        Map<String, Object> stale = event(UUID.randomUUID().toString(), "PRODUCT", productId, 0,
+                productPayload(productId, "TAB-001", "Edición desconectada"));
+        mockMvc.perform(authenticated(post("/api/v1/sync/push")).contentType(MediaType.APPLICATION_JSON)
+                        .content(push(stale))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.results[0].status").value("CONFLICT"))
+                .andExpect(jsonPath("$.results[0].conflictId").isNotEmpty());
 
-        Map<String, Object> staleEvent = event(UUID.randomUUID().toString(), "PRODUCT", productId, 0,
-                Map.of("productId", productId, "code", "TAB-001", "name", "Edición desconectada"));
-        mockMvc.perform(authenticated(post("/api/v1/sync/push"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("deviceId", deviceId, "events", List.of(staleEvent)))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.results[0].status").value("CONFLICT"));
-
-        mockMvc.perform(authenticated(get("/api/v1/sync/pull").param("after", "0").param("limit", "300")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.nextCursor").value(2))
+        long expectedCursor = initialChanges + 2;
+        mockMvc.perform(authenticated(get("/api/v1/sync/pull")).param("after", Long.toString(initialChanges)).param("limit", "300"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.nextCursor").value(expectedCursor))
                 .andExpect(jsonPath("$.changes.length()").value(2));
+        mockMvc.perform(authenticated(post("/api/v1/sync/pull/ack")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cursor\":" + expectedCursor + "}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.acknowledgedCursor").value(expectedCursor));
 
-        mockMvc.perform(get("/admin/products/new").with(user("admin").roles("ADMIN")))
-                .andExpect(status().isOk());
+        mockMvc.perform(get("/admin/products/new").with(user("admin").roles("ADMIN"))).andExpect(status().isOk());
+        mockMvc.perform(post("/admin/products").with(user("admin").roles("ADMIN")).with(csrf())
+                        .param("code", "WEB-" + UUID.randomUUID().toString().substring(0, 8)).param("name", "Producto creado en PC")
+                        .param("description", "Debe llegar a la tablet").param("company", "Empresa Demo")
+                        .param("brand", "Marca Demo").param("category", "General").param("subcategory", "")
+                        .param("productType", "SINGLE").param("status", "ACTIVE").param("version", "0")
+                        .param("attributesJson", "{}").param("variantsJson", "[{\"sku\":\"WEB-SKU\",\"attributes\":{}}]")
+                        .param("presentationsJson", "[]").param("pricesJson", "[]").param("imagesJson", "[]"))
+                .andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/admin/products"));
 
-        mockMvc.perform(post("/admin/products")
-                        .with(user("admin").roles("ADMIN"))
-                        .with(csrf())
-                        .param("code", "WEB-001")
-                        .param("name", "Producto creado en PC")
-                        .param("description", "Debe llegar a la tablet")
-                        .param("company", "Empresa Demo")
-                        .param("brand", "Marca Demo")
-                        .param("category", "General")
-                        .param("status", "ACTIVE")
-                        .param("version", "0"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/admin/products"));
-
-        mockMvc.perform(get("/admin/products").with(user("admin").roles("ADMIN")))
-                .andExpect(status().isOk());
-
-        mockMvc.perform(authenticated(get("/api/v1/sync/pull").param("after", "2").param("limit", "300")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.changes[0].entityType").value("PRODUCT"))
-                .andExpect(jsonPath("$.changes[0].payload.code").value("WEB-001"));
-
-        mockMvc.perform(authenticated(get("/api/v1/sync/bootstrap").param("page", "0").param("limit", "300")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.records.length()").value(3));
-
-        assertThat(recordRepository.count()).isEqualTo(3);
-        assertThat(changeRepository.count()).isEqualTo(3);
-        assertThat(productRepository.count()).isEqualTo(2);
-        assertThat(conflictRepository.count()).isEqualTo(1);
-        assertThat(eventRepository.count()).isEqualTo(3);
+        mockMvc.perform(authenticated(get("/api/v1/sync/bootstrap")).param("page", "0").param("limit", "300"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.snapshotCursor").isNumber());
+        assertThat(recordRepository.count()).isEqualTo(initialRecords + 3);
+        assertThat(changeRepository.count()).isEqualTo(initialChanges + 3);
+        assertThat(productRepository.count()).isEqualTo(initialProducts + 2);
+        assertThat(conflictRepository.count()).isEqualTo(initialConflicts + 1);
+        assertThat(eventRepository.count()).isEqualTo(initialEvents + 3);
     }
 
     @Test
     void rejectsRequestsWithoutDeviceCredentials() throws Exception {
-        mockMvc.perform(get("/api/v1/sync/status"))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/sync/status")).andExpect(status().isUnauthorized());
     }
 
-    private Map<String, Object> event(String eventId, String type, String entityId, long baseVersion,
-                                      Map<String, Object> payload) {
-        return Map.of(
-                "eventId", eventId,
-                "entityType", type,
-                "entityId", entityId,
-                "operation", "UPSERT",
-                "baseVersion", baseVersion,
-                "occurredAt", Instant.now().toString(),
-                "payload", payload
-        );
+    private Map<String, Object> productPayload(String id, String code, String name) {
+        return Map.ofEntries(Map.entry("productId", id), Map.entry("code", code), Map.entry("name", name),
+                Map.entry("company", "Empresa Demo"), Map.entry("brand", "Marca Demo"), Map.entry("category", "Taladros"),
+                Map.entry("status", "ACTIVE"), Map.entry("productType", "SINGLE"), Map.entry("attributes", Map.of()),
+                Map.entry("variants", List.of(Map.of("sku", code, "shortName", name, "status", "ACTIVE", "attributes", Map.of()))),
+                Map.entry("presentations", List.of()), Map.entry("prices", List.of()), Map.entry("images", List.of()));
+    }
+
+    private Map<String, Object> event(String id, String type, String entityId, long base, Map<String, Object> payload) {
+        return Map.ofEntries(Map.entry("eventId", id), Map.entry("entityType", type), Map.entry("entityId", entityId),
+                Map.entry("operation", "UPSERT"), Map.entry("baseVersion", base), Map.entry("payloadVersion", 1),
+                Map.entry("schemaVersion", "1.0"), Map.entry("occurredAt", Instant.now().toString()), Map.entry("payload", payload));
+    }
+
+    @SafeVarargs
+    private final String push(Map<String, Object>... events) throws Exception {
+        return objectMapper.writeValueAsString(Map.of("deviceId", deviceId, "apiContractVersion", "1.0", "events", List.of(events)));
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder authenticated(

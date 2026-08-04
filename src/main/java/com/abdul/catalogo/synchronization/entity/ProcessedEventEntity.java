@@ -42,4 +42,13 @@ public class ProcessedEventEntity {
 
     @Column(name = "message", length = 500)
     private String message;
+
+    @Column(name = "request_checksum", length = 64, columnDefinition = "CHAR(64)")
+    private String requestChecksum;
+
+    @Column(name = "payload_version", nullable = false)
+    private int payloadVersion;
+
+    @Column(name = "schema_version", length = 30)
+    private String schemaVersion;
 }

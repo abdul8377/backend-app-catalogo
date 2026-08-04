@@ -31,6 +31,12 @@ public class DeviceEntity extends AuditedEntity {
     @Column(nullable = false, length = 40)
     private String platform;
 
+    @Column(name = "app_version", nullable = false, length = 40)
+    private String appVersion;
+
+    @Column(name = "contract_version", nullable = false, length = 20)
+    private String contractVersion;
+
     @Column(name = "token_hash", nullable = false, unique = true, length = 64, columnDefinition = "CHAR(64)")
     private String tokenHash;
 
@@ -40,4 +46,10 @@ public class DeviceEntity extends AuditedEntity {
 
     @Column(name = "last_seen_at")
     private Instant lastSeenAt;
+
+    @Column(name = "revoked_at")
+    private Instant revokedAt;
+
+    @Column(name = "token_rotated_at")
+    private Instant tokenRotatedAt;
 }

@@ -1,6 +1,7 @@
 package com.abdul.catalogo.product.entity;
 
 import com.abdul.catalogo.product.model.ProductStatus;
+import com.abdul.catalogo.product.model.ProductType;
 import com.abdul.catalogo.shared.persistence.AuditedEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -48,6 +49,25 @@ public class ProductEntity extends AuditedEntity {
 
     @Column(nullable = false, length = 160)
     private String category = "";
+
+    @Column(name = "company_id", nullable = false, length = 160)
+    private String companyId = "";
+
+    @Column(name = "brand_id", nullable = false, length = 160)
+    private String brandId = "";
+
+    @Column(name = "category_id", nullable = false, length = 160)
+    private String categoryId = "";
+
+    @Column(name = "subcategory_id", nullable = false, length = 160)
+    private String subcategoryId = "";
+
+    @Column(nullable = false, length = 160)
+    private String subcategory = "";
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "product_type", nullable = false, length = 20)
+    private ProductType productType = ProductType.SINGLE;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

@@ -57,4 +57,17 @@ public class SyncConflictEntity {
 
     @Column(name = "resolved_at")
     private Instant resolvedAt;
+
+    @Column(name = "resolved_by", length = 120)
+    private String resolvedBy;
+
+    @Column(name = "resolution", length = 40)
+    private String resolution;
+
+    @Lob
+    @Column(name = "resolution_payload", columnDefinition = "LONGTEXT")
+    private String resolutionPayload;
+
+    @Column(name = "resolution_event_id", length = 36, columnDefinition = "CHAR(36)")
+    private String resolutionEventId;
 }

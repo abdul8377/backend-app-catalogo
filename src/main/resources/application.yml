@@ -1,14 +1,14 @@
 server:
   address: 0.0.0.0
-  port: 8080
+  port: 8081
 
 spring:
   application:
     name: backend-app-catalogo
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/app_catalogo?createDatabaseIfNotExist=true&serverTimezone=UTC}
-    username: ${DB_USERNAME:app_catalogo}
-    password: ${DB_PASSWORD:app_catalogo_dev}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -19,6 +19,8 @@ spring:
     multipart:
       max-file-size: 20MB
       max-request-size: 25MB
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   thymeleaf:
     cache: false
 
@@ -26,8 +28,43 @@ app:
   admin:
     username: ${ADMIN_USERNAME:admin}
     password: ${ADMIN_PASSWORD:admin}
+  contract:
+    version: "1.0"
+  server:
+    name: ${SERVER_NAME:Catálogo Comercial}
+    mdns-enabled: ${MDNS_ENABLED:true}
+    service-type: _appcatalogo._tcp.local.
+    public-port: ${SERVER_PORT:8081}
+  pairing:
+    code-duration: PT10M
   sync:
     push-batch-size: 100
     pull-batch-size: 300
     bootstrap-batch-size: 300
+  imports:
+    max-file-size-bytes: 20971520
+    max-rows: 10000
+    retention: P7D
+  storage:
+    root: ${STORAGE_ROOT:D:/AppCatalogoStorage}
+    max-file-size-bytes: 26214400
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+
+logging:
+  file:
+    name: ${LOG_FILE:logs/app-catalogo.log}
+  logback:
+    rollingpolicy:
+      max-file-size: 20MB
+      max-history: 30
+      total-size-cap: 1GB
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"

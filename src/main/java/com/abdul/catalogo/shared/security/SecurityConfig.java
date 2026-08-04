@@ -23,7 +23,7 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/devices/register", "/error", "/css/**", "/js/**").permitAll()
+                        .requestMatchers("/api/v1/devices/register", "/api/v1/discovery", "/public/files/**", "/error", "/css/**", "/js/**").permitAll()
                         .requestMatchers("/api/**").hasRole("DEVICE")
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().permitAll())
@@ -38,6 +38,10 @@ public class SecurityConfig {
 
     @Bean
     UserDetailsService userDetailsService(AdminProperties properties, PasswordEncoder encoder) {
+        if (properties.username() == null || properties.username().isBlank()
+                || properties.password() == null || properties.password().isBlank()) {
+            throw new IllegalStateException("ADMIN_USERNAME y ADMIN_PASSWORD son obligatorios; no existen credenciales predeterminadas.");
+        }
         var admin = User.withUsername(properties.username())
                 .password(encoder.encode(properties.password()))
                 .roles("ADMIN")

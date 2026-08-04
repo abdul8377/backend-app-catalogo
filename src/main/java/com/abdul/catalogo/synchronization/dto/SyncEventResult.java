@@ -7,6 +7,7 @@ public record SyncEventResult(
         SyncResultStatus status,
         Long serverVersion,
         Long serverSequence,
+        String conflictId,
         String message
 ) {
 }

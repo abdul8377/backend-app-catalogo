@@ -8,4 +8,5 @@ import java.util.List;
 
 public interface ChangeLogRepository extends JpaRepository<ChangeLogEntity, Long> {
     List<ChangeLogEntity> findBySequenceGreaterThanOrderBySequenceAsc(long sequence, Pageable pageable);
+    ChangeLogEntity findTopByOrderBySequenceDesc();
 }

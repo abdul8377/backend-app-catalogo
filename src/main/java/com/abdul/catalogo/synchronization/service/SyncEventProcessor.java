@@ -1,6 +1,7 @@
 package com.abdul.catalogo.synchronization.service;
 
 import com.abdul.catalogo.product.service.ProductProjectionService;
+import com.abdul.catalogo.shared.crypto.Digests;
 import com.abdul.catalogo.shared.exception.BusinessRuleException;
 import com.abdul.catalogo.synchronization.dto.SyncEventRequest;
 import com.abdul.catalogo.synchronization.dto.SyncEventResult;
@@ -15,17 +16,16 @@ import com.abdul.catalogo.synchronization.repository.ChangeLogRepository;
 import com.abdul.catalogo.synchronization.repository.ProcessedEventRepository;
 import com.abdul.catalogo.synchronization.repository.SyncConflictRepository;
 import com.abdul.catalogo.synchronization.repository.SyncRecordRepository;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Service
 public class SyncEventProcessor {
-
     private final SyncEntityCatalog entityCatalog;
     private final SyncRecordRepository recordRepository;
     private final ProcessedEventRepository eventRepository;
@@ -49,34 +49,47 @@ public class SyncEventProcessor {
 
     @Transactional
     public SyncEventResult process(String deviceId, SyncEventRequest event) {
+        String payloadJson = write(event.payload());
+        String requestChecksum = requestChecksum(event, payloadJson);
         ProcessedEventEntity previous = eventRepository.findById(event.eventId()).orElse(null);
         if (previous != null) {
+            if (!previous.getDeviceId().equals(deviceId)) {
+                return new SyncEventResult(event.eventId(), SyncResultStatus.REJECTED, previous.getServerVersion(),
+                        previous.getServerSequence(), null, "El eventId pertenece a otro dispositivo.");
+            }
+            if (previous.getRequestChecksum() != null && !previous.getRequestChecksum().equals(requestChecksum)) {
+                return new SyncEventResult(event.eventId(), SyncResultStatus.REJECTED, previous.getServerVersion(),
+                        previous.getServerSequence(), null,
+                        "El eventId ya fue usado con un contenido diferente.");
+            }
             return new SyncEventResult(event.eventId(), SyncResultStatus.ALREADY_PROCESSED,
-                    previous.getServerVersion(), previous.getServerSequence(), previous.getMessage());
+                    previous.getServerVersion(), previous.getServerSequence(), null, previous.getMessage());
         }
 
         final String entityType;
-        final String payloadJson;
         try {
             entityType = entityCatalog.normalizeAndValidate(event.entityType());
-            payloadJson = objectMapper.writeValueAsString(event.payload());
+            if (entityCatalog.isAppendOnly(entityType) && event.operation() == SyncOperation.DELETE) {
+                throw new BusinessRuleException("APPEND_ONLY_DELETE", "Los historiales y movimientos son append-only.");
+            }
+            if (event.checksum() != null && !event.checksum().equalsIgnoreCase(Digests.sha256(payloadJson))) {
+                throw new BusinessRuleException("PAYLOAD_CHECKSUM_MISMATCH", "El checksum declarado no corresponde al payload.");
+            }
             if (entityType.equals("PRODUCT") && event.operation() == SyncOperation.UPSERT) {
                 productProjectionService.validateUpsert(event.entityId(), event.payload());
             }
-        } catch (BusinessRuleException | JacksonException exception) {
-            String message = exception.getMessage();
-            saveProcessed(event.eventId(), deviceId, SyncResultStatus.REJECTED, null, null, message);
-            return new SyncEventResult(event.eventId(), SyncResultStatus.REJECTED, null, null, message);
+        } catch (BusinessRuleException exception) {
+            saveProcessed(event, deviceId, requestChecksum, SyncResultStatus.REJECTED, null, null, exception.getMessage());
+            return new SyncEventResult(event.eventId(), SyncResultStatus.REJECTED, null, null, null, exception.getMessage());
         }
 
-        SyncRecordEntity record = recordRepository.findByEntityTypeAndEntityId(entityType, event.entityId()).orElse(null);
+        SyncRecordEntity record = recordRepository.findForUpdate(entityType, event.entityId()).orElse(null);
         long currentVersion = record == null ? 0 : record.getVersion();
         if (event.baseVersion() != currentVersion) {
-            createConflict(deviceId, event, entityType, payloadJson, record, currentVersion);
-            saveProcessed(event.eventId(), deviceId, SyncResultStatus.CONFLICT, currentVersion, null,
-                    "La versión del servidor cambió desde la última sincronización.");
-            return new SyncEventResult(event.eventId(), SyncResultStatus.CONFLICT, currentVersion, null,
-                    "La versión del servidor cambió desde la última sincronización.");
+            String conflictId = createConflict(deviceId, event, entityType, payloadJson, record, currentVersion);
+            String message = "La versión del servidor cambió desde la última sincronización.";
+            saveProcessed(event, deviceId, requestChecksum, SyncResultStatus.CONFLICT, currentVersion, null, message);
+            return new SyncEventResult(event.eventId(), SyncResultStatus.CONFLICT, currentVersion, null, conflictId, message);
         }
 
         if (record == null) {
@@ -92,7 +105,7 @@ public class SyncEventProcessor {
         record.setDeleted(deleted);
         record.setDeletedAt(deleted ? Instant.now() : null);
         record.setOriginDeviceId(deviceId);
-        recordRepository.save(record);
+        recordRepository.saveAndFlush(record);
 
         if (entityType.equals("PRODUCT")) {
             productProjectionService.apply(event.entityId(), event.payload(), nextVersion, deviceId, deleted);
@@ -108,13 +121,12 @@ public class SyncEventProcessor {
         change.setChangedAt(Instant.now());
         change = changeRepository.saveAndFlush(change);
 
-        saveProcessed(event.eventId(), deviceId, SyncResultStatus.ACCEPTED, nextVersion, change.getSequence(), null);
-        return new SyncEventResult(event.eventId(), SyncResultStatus.ACCEPTED,
-                nextVersion, change.getSequence(), null);
+        saveProcessed(event, deviceId, requestChecksum, SyncResultStatus.ACCEPTED, nextVersion, change.getSequence(), null);
+        return new SyncEventResult(event.eventId(), SyncResultStatus.ACCEPTED, nextVersion, change.getSequence(), null, null);
     }
 
-    private void createConflict(String deviceId, SyncEventRequest event, String entityType, String clientPayload,
-                                SyncRecordEntity record, long currentVersion) {
+    private String createConflict(String deviceId, SyncEventRequest event, String entityType, String clientPayload,
+                                  SyncRecordEntity record, long currentVersion) {
         SyncConflictEntity conflict = new SyncConflictEntity();
         conflict.setId(UUID.randomUUID().toString());
         conflict.setEntityType(entityType);
@@ -127,18 +139,37 @@ public class SyncEventProcessor {
         conflict.setStatus(ConflictStatus.PENDING);
         conflict.setCreatedAt(Instant.now());
         conflictRepository.save(conflict);
+        return conflict.getId();
     }
 
-    private void saveProcessed(String eventId, String deviceId, SyncResultStatus status,
-                               Long serverVersion, Long serverSequence, String message) {
+    private void saveProcessed(SyncEventRequest event, String deviceId, String requestChecksum,
+                               SyncResultStatus status, Long serverVersion, Long serverSequence, String message) {
         ProcessedEventEntity processed = new ProcessedEventEntity();
-        processed.setEventId(eventId);
+        processed.setEventId(event.eventId());
         processed.setDeviceId(deviceId);
         processed.setStatus(status);
         processed.setServerVersion(serverVersion);
         processed.setServerSequence(serverSequence);
         processed.setProcessedAt(Instant.now());
         processed.setMessage(message);
+        processed.setRequestChecksum(requestChecksum);
+        processed.setPayloadVersion(event.payloadVersion());
+        processed.setSchemaVersion(event.schemaVersion());
         eventRepository.save(processed);
+    }
+
+    private String requestChecksum(SyncEventRequest event, String payloadJson) {
+        String canonical = String.join("\n", event.entityType().trim().toUpperCase(), event.entityId(),
+                event.operation().name(), Long.toString(event.baseVersion()), Integer.toString(event.payloadVersion()),
+                event.schemaVersion() == null ? "" : event.schemaVersion(), event.occurredAt().toString(), payloadJson);
+        return Digests.sha256(canonical);
+    }
+
+    private String write(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JacksonException exception) {
+            throw new BusinessRuleException("INVALID_JSON", "El payload no es JSON válido.");
+        }
     }
 }

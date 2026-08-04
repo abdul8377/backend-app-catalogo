@@ -2,6 +2,8 @@ package com.abdul.catalogo.synchronization.controller;
 
 import com.abdul.catalogo.synchronization.dto.SyncBootstrapResponse;
 import com.abdul.catalogo.synchronization.dto.SyncPullResponse;
+import com.abdul.catalogo.synchronization.dto.SyncPullAckRequest;
+import com.abdul.catalogo.synchronization.dto.SyncPullAckResponse;
 import com.abdul.catalogo.synchronization.dto.SyncPushRequest;
 import com.abdul.catalogo.synchronization.dto.SyncPushResponse;
 import com.abdul.catalogo.synchronization.dto.SyncStatusResponse;
@@ -42,10 +44,17 @@ public class SyncController {
         return readService.pull(principal.deviceId(), after, limit);
     }
 
+    @PostMapping("/pull/ack")
+    public SyncPullAckResponse acknowledgePull(@AuthenticationPrincipal DevicePrincipal principal,
+                                               @Valid @RequestBody SyncPullAckRequest request) {
+        return readService.acknowledge(principal.deviceId(), request.cursor());
+    }
+
     @GetMapping("/bootstrap")
     public SyncBootstrapResponse bootstrap(@RequestParam(defaultValue = "0") int page,
-                                           @RequestParam(defaultValue = "300") int limit) {
-        return readService.bootstrap(page, limit);
+                                           @RequestParam(defaultValue = "300") int limit,
+                                           @RequestParam(required = false) Long snapshotCursor) {
+        return readService.bootstrap(page, limit, snapshotCursor);
     }
 
     @GetMapping("/status")

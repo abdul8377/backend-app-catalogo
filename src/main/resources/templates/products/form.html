@@ -1,31 +1,21 @@
 <!doctype html>
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title th:text="${editing ? 'Editar producto' : 'Nuevo producto'}"></title>
-    <link rel="stylesheet" th:href="@{/css/admin.css}">
-</head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title th:text="${editing ? 'Editar producto' : 'Nuevo producto'}"></title><link rel="stylesheet" th:href="@{/css/admin.css}"><link rel="stylesheet" th:href="@{/css/admin-v2.css}"></head>
 <body>
-<header class="topbar"><div><strong>App Catálogo</strong><span>Servidor local</span></div><nav><a class="active" th:href="@{/admin/products}">Productos</a></nav></header>
-<main class="container narrow">
-    <a class="back" th:href="@{/admin/products}">← Volver a productos</a>
-    <section class="page-heading"><div><p class="eyebrow">Catálogo central</p><h1 th:text="${editing ? 'Editar producto' : 'Nuevo producto'}"></h1><p>Al guardar se generará una nueva versión sincronizable.</p></div></section>
-    <form class="card product-form" method="post" th:object="${productForm}" th:action="${editing ? '/admin/products/' + productId : '/admin/products'}">
-        <input type="hidden" th:field="*{version}">
-        <div class="grid two">
-            <label>Código<input th:field="*{code}" required><small class="error" th:errors="*{code}"></small></label>
-            <label>Nombre<input th:field="*{name}" required><small class="error" th:errors="*{name}"></small></label>
-        </div>
-        <label>Descripción<textarea th:field="*{description}" rows="4"></textarea><small class="error" th:errors="*{description}"></small></label>
-        <div class="grid three">
-            <label>Empresa<input th:field="*{company}"></label>
-            <label>Marca<input th:field="*{brand}"></label>
-            <label>Categoría<input th:field="*{category}"></label>
-        </div>
-        <label>Estado<select th:field="*{status}"><option th:each="status : ${statuses}" th:value="${status}" th:text="${status}"></option></select></label>
-        <div class="form-actions"><a class="button" th:href="@{/admin/products}">Cancelar</a><button class="button primary" type="submit">Guardar producto</button></div>
-    </form>
-</main>
-</body>
-</html>
+<header class="topbar"><div><strong>App Catálogo</strong><span>Servidor local</span></div><nav><a class="active" th:href="@{/admin/products}">Productos</a><a th:href="@{/admin/products/import}">Importar Excel</a><a th:href="@{/admin/devices}">Dispositivos</a></nav></header>
+<main class="container">
+<a class="back" th:href="@{/admin/products}">← Volver a productos</a>
+<section class="page-heading"><div><p class="eyebrow">Agregado sincronizable</p><h1 th:text="${editing ? 'Editar producto' : 'Nuevo producto'}"></h1><p>Producto, variantes, presentaciones, precios e imágenes se publican juntos en una transacción.</p></div></section>
+<form class="card product-form" method="post" th:object="${productForm}" th:action="${editing ? '/admin/products/' + productId : '/admin/products'}">
+<input type="hidden" th:field="*{version}"><div class="form-error" th:if="${#fields.hasGlobalErrors()}" th:each="error : ${#fields.globalErrors()}" th:text="${error}"></div>
+<h2>Información general</h2><div class="grid two"><label>Código de familia<input th:field="*{code}" required><small class="error" th:errors="*{code}"></small></label><label>Nombre<input th:field="*{name}" required><small class="error" th:errors="*{name}"></small></label></div>
+<label>Descripción<textarea th:field="*{description}" rows="3"></textarea></label><div class="grid three"><label>Tipo<select th:field="*{productType}"><option th:each="type : ${productTypes}" th:value="${type}" th:text="${type}"></option></select></label><label>Estado<select th:field="*{status}"><option th:each="status : ${statuses}" th:value="${status}" th:text="${status}"></option></select></label><label>Versión<input th:value="*{version}" disabled></label></div>
+<h2>Clasificación estable</h2><div class="grid two"><label>Empresa<input th:field="*{company}"></label><label>ID empresa<input th:field="*{companyId}" placeholder="Se genera si queda vacío"></label><label>Marca<input th:field="*{brand}"></label><label>ID marca<input th:field="*{brandId}" placeholder="Se genera si queda vacío"></label><label>Categoría<input th:field="*{category}"></label><label>ID categoría<input th:field="*{categoryId}" placeholder="Se genera si queda vacío"></label><label>Subcategoría<input th:field="*{subcategory}"></label><label>ID subcategoría<input th:field="*{subcategoryId}" placeholder="Se genera si queda vacío"></label></div>
+<h2>Contenido del agregado</h2><p class="help">Las variantes requieren SKU único; presentaciones y precios deben referenciar esos SKU.</p>
+<label>Atributos comunes (objeto JSON)<textarea class="code-editor" th:field="*{attributesJson}" rows="5" spellcheck="false"></textarea></label>
+<label>Variantes (arreglo JSON)<textarea class="code-editor" th:field="*{variantsJson}" rows="9" spellcheck="false" required></textarea></label>
+<label>Presentaciones (arreglo JSON)<textarea class="code-editor" th:field="*{presentationsJson}" rows="7" spellcheck="false"></textarea></label>
+<label>Precios (arreglo JSON)<textarea class="code-editor" th:field="*{pricesJson}" rows="7" spellcheck="false"></textarea></label>
+<label>Imágenes (arreglo JSON; claves relativas)<textarea class="code-editor" th:field="*{imagesJson}" rows="6" spellcheck="false"></textarea></label>
+<div class="form-actions"><a class="button" th:href="@{/admin/products}">Cancelar</a><button class="button primary" type="submit">Validar y guardar agregado</button></div>
+</form></main></body></html>

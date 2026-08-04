@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="_csrf" th:content="${_csrf.token}"><meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <title>Dispositivos - App Catálogo</title>
+    <link rel="stylesheet" th:href="@{/css/admin.css}"><link rel="stylesheet" th:href="@{/css/admin-v2.css}">
+</head>
+<body>
+<header class="topbar"><div><strong>App Catálogo</strong><span>Servidor local</span></div><nav><a th:href="@{/admin/products}">Productos</a><a th:href="@{/admin/products/import}">Importar Excel</a><a class="active" th:href="@{/admin/devices}">Dispositivos</a><a th:href="@{/admin/conflicts}">Conflictos</a></nav></header>
+<main class="container">
+    <section class="page-heading"><div><p class="eyebrow">Emparejamiento seguro</p><h1>Dispositivos</h1><p th:text="|${server.serverName} · ${server.serverId} · contrato ${server.apiContractVersion}|"></p></div><button id="pair-button" class="button primary">Generar código de un solo uso</button></section>
+    <section id="pairing" class="card pairing-card" hidden><div><p class="eyebrow">Válido temporalmente</p><div id="pair-code" class="pair-code"></div><p id="pair-expiry"></p><p>Escanea el QR desde la tablet. La identidad estable es el serverId, no la IP actual.</p></div><img id="pair-qr" alt="QR de emparejamiento"></section>
+    <section class="card table-card"><table><thead><tr><th>Dispositivo</th><th>Aplicación</th><th>Estado</th><th>Cursores</th><th>Última actividad</th><th>Acciones</th></tr></thead><tbody>
+    <tr th:each="device : ${devices}"><td><strong th:text="${device.name}"></strong><small th:text="${device.deviceId}"></small></td><td><span th:text="${device.platform}"></span><small th:text="|v${device.appVersion} · contrato ${device.apiContractVersion}|"></small></td><td><span class="badge" th:classappend="${device.status.name().toLowerCase()}" th:text="${device.status}"></span></td><td><span th:text="|Entregado ${device.lastDeliveredCursor}|"></span><small th:text="|Confirmado ${device.lastAcknowledgedCursor}|"></small></td><td th:text="${device.lastSeenAt ?: 'Sin conexión todavía'}"></td><td class="actions" th:if="${device.status.name() == 'ACTIVE'}"><button type="button" class="rotate-token" th:data-id="${device.deviceId}">Rotar token</button><button type="button" class="revoke-device" th:data-id="${device.deviceId}">Revocar</button></td><td th:unless="${device.status.name() == 'ACTIVE'}">—</td></tr>
+    <tr th:if="${#lists.isEmpty(devices)}"><td colspan="6" class="empty">No hay tablets emparejadas.</td></tr></tbody></table></section>
+</main>
+<script>
+const csrf=document.querySelector('meta[name="_csrf"]').content,header=document.querySelector('meta[name="_csrf_header"]').content;
+async function send(url){const response=await fetch(url,{method:'POST',headers:{[header]:csrf}});if(!response.ok)throw new Error(await response.text());return response.headers.get('content-type')?.includes('json')?response.json():null;}
+document.getElementById('pair-button').addEventListener('click',async()=>{try{const data=await send('/admin/pairing-codes');document.getElementById('pair-code').textContent=data.pairingCode;document.getElementById('pair-expiry').textContent='Expira: '+new Date(data.expiresAt).toLocaleString();document.getElementById('pair-qr').src=data.qrImageDataUrl;document.getElementById('pairing').hidden=false;}catch(e){alert('No se pudo generar el código.');}});
+document.querySelectorAll('.rotate-token').forEach(button=>button.addEventListener('click',async()=>{if(!confirm('El token anterior dejará de funcionar. ¿Continuar?'))return;try{const data=await send('/admin/devices/'+button.dataset.id+'/rotate-token');prompt('Copia este token ahora; no volverá a mostrarse:',data.token);}catch(e){alert('No se pudo rotar el token.');}}));
+document.querySelectorAll('.revoke-device').forEach(button=>button.addEventListener('click',async()=>{if(!confirm('La tablet perderá acceso inmediatamente. ¿Revocar?'))return;try{await send('/admin/devices/'+button.dataset.id+'/revoke');location.reload();}catch(e){alert('No se pudo revocar el dispositivo.');}}));
+</script>
+</body></html>

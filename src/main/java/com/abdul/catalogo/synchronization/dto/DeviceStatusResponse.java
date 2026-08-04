@@ -8,10 +8,14 @@ public record DeviceStatusResponse(
         String deviceId,
         String name,
         String platform,
+        String appVersion,
+        String apiContractVersion,
         DeviceStatus status,
         Instant lastSeenAt,
-        long lastPullCursor,
+        long lastDeliveredCursor,
+        long lastAcknowledgedCursor,
         Instant lastPushAt,
-        Instant lastPullAt
+        Instant lastPullAt,
+        String lastError
 ) {
 }

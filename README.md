@@ -1,147 +1,126 @@
 # Backend App Catálogo
 
-Servidor local Spring Boot para la aplicación Flutter offline-first. MySQL conserva la copia central y
-la tablet continúa trabajando únicamente con SQLite cuando no hay red.
+Servidor local Spring Boot para la aplicación Flutter offline-first. MySQL conserva la copia central en la PC y cada tablet trabaja con su base SQLite, incluso sin red. La sincronización es completa y bidireccional; el único CRUD comercial web del backend es Productos.
 
-## Alcance actual
+## Funcionalidad incluida
 
-- Sincronización bidireccional de todos los módulos mediante registros JSON versionados.
-- Registro y autenticación de dispositivos.
-- Envío idempotente por `eventId`.
-- Descarga incremental mediante cursor global.
-- Bootstrap paginado para tablets nuevas o restauradas.
-- Detección y almacenamiento de conflictos de versión.
-- Proyección consultable de productos.
-- CRUD web de productos; sus cambios entran en el mismo flujo de sincronización.
-- Esquema MySQL administrado con Flyway.
+- Descubrimiento por mDNS/DNS-SD (`_appcatalogo._tcp.local.`), `serverId` persistente y endpoint público mínimo.
+- Emparejamiento mediante código y QR de un solo uso con vencimiento, token por dispositivo, rotación, revocación y auditoría.
+- Push por lotes con contrato versionado, idempotencia, checksum, rechazo de reutilización de `eventId` y conflictos de versión.
+- Pull incremental con cursor entregado y confirmación separada mediante ACK.
+- Bootstrap completo paginado en orden de dependencias, con tombstones y cursor de inicio para el pull posterior.
+- Escritura protegida con bloqueo por entidad, lock pesimista y versión técnica optimista.
+- Producto como agregado: clasificación estable, variantes, atributos, presentaciones, precios e imágenes.
+- CRUD web de productos, importación Excel con vista previa, confirmación por producto e informe XLSX.
+- Almacenamiento local abstraído, claves relativas y carga de archivos en dos pasos.
+- Resolución web de conflictos, retención temporal, health/info, request ID, logs rotativos y scripts de respaldo/restauración.
 
-La importación Excel, las imágenes y la pantalla de resolución de conflictos se implementarán sobre
-este núcleo en las siguientes migraciones.
+No se crean CRUD web para empresas, marcas, categorías, clientes, pedidos, cotizaciones, preparación, cargas ni historiales. Esas entidades viajan por sincronización.
 
-## Ejecución local
+## Requisitos y configuración
 
-Requisitos: Java 17 y MySQL 8.
+- Java 17
+- MySQL 8 accesible solo desde la PC (`127.0.0.1`/`localhost`)
+- Valores predeterminados para el entorno local con Laragon:
 
 ```powershell
 $env:DB_URL='jdbc:mysql://localhost:3306/app_catalogo?createDatabaseIfNotExist=true&serverTimezone=UTC'
-$env:DB_USERNAME='app_catalogo'
-$env:DB_PASSWORD='cambiar-esta-clave'
+$env:DB_USERNAME='root'
+$env:DB_PASSWORD=''
 $env:ADMIN_USERNAME='admin'
-$env:ADMIN_PASSWORD='cambiar-admin'
+$env:ADMIN_PASSWORD='admin'
+$env:STORAGE_ROOT='D:/AppCatalogoStorage'
+$env:SERVER_NAME='Catálogo oficina principal'
 .\mvnw.cmd spring-boot:run
 ```
 
-- Administración: `http://localhost:8080/admin/products`
-- API móvil: `http://IP-DE-LA-PC:8080/api/v1`
+Estas variables son opcionales mientras se usen esos valores locales. Para otro entorno deben sobrescribirse con credenciales seguras.
 
-Los valores predeterminados de `application.yml` son únicamente para desarrollo.
+El servidor escucha en `0.0.0.0:8081` para la red privada. MySQL no debe exponerse a la red. Las páginas principales son:
 
-## Autenticación del dispositivo
+- `/admin/products`: CRUD de productos.
+- `/admin/products/import`: plantilla, vista previa y confirmación Excel.
+- `/admin/devices`: servidor, QR, dispositivos, rotación y revocación.
+- `/admin/conflicts`: resolución de conflictos pendientes.
+- `/actuator/health` y `/actuator/info`: estado operativo y versión del contrato.
 
-Registrar una instalación una sola vez:
+## Emparejamiento y descubrimiento
+
+1. El administrador genera un código en `/admin/devices`.
+2. La tablet descubre `_appcatalogo._tcp.local.` o usa una URL manual.
+3. Puede verificar el servidor con `GET /api/v1/discovery`.
+4. Escanea el QR y registra la instalación:
 
 ```http
 POST /api/v1/devices/register
 Content-Type: application/json
 
-{"name":"Tablet comercial","platform":"android"}
-```
-
-La respuesta contiene `deviceId` y `token`. El token se muestra una sola vez. Todas las demás llamadas
-de la app deben incluir:
-
-```http
-X-Device-Id: <deviceId>
-X-Device-Token: <token>
-```
-
-## Push tablet a PC
-
-```http
-POST /api/v1/sync/push
-```
-
-```json
 {
-  "deviceId": "uuid-de-tablet",
-  "events": [
-    {
-      "eventId": "uuid-del-evento",
-      "entityType": "PRODUCT",
-      "entityId": "uuid-del-producto",
-      "operation": "UPSERT",
-      "baseVersion": 0,
-      "occurredAt": "2026-08-04T02:00:00Z",
-      "payload": {
-        "productId": "uuid-del-producto",
-        "code": "PROD-001",
-        "name": "Producto de ejemplo",
-        "status": "ACTIVE"
-      }
-    }
-  ]
+  "name": "Tablet comercial",
+  "platform": "android",
+  "pairingCode": "12345678",
+  "appVersion": "1.0.0",
+  "apiContractVersion": "1.0"
 }
 ```
 
-Estados por evento: `ACCEPTED`, `ALREADY_PROCESSED`, `REJECTED` o `CONFLICT`. La eliminación lógica
-usa `operation: DELETE`. `baseVersion` debe ser la última versión aplicada localmente; una diferencia
-crea un conflicto y nunca sobrescribe silenciosamente.
+El token de la respuesta se muestra una vez. Las llamadas privadas usan `X-Device-Id` y `X-Device-Token`.
 
-## Pull PC a tablet
+## Sincronización
 
-```http
-GET /api/v1/sync/pull?after=0&limit=300
-```
+El contrato congelado está documentado en [docs/sync-contract-v1.md](docs/sync-contract-v1.md).
 
-La tablet guarda `nextCursor` solamente después de aplicar toda la respuesta en una transacción SQLite.
-Si `hasMore` es `true`, repite la llamada con el nuevo cursor. Los cambios descargados se escriben con
-un modo interno `saveFromSync`, sin volver a insertarlos en `sync_queue`.
+- Tablet → PC: `POST /api/v1/sync/push`.
+- PC → tablet: `GET /api/v1/sync/pull?after=0&limit=300`.
+- Confirmación después de aplicar en una transacción SQLite: `POST /api/v1/sync/pull/ack`.
+- Copia completa inicial: `GET /api/v1/sync/bootstrap?page=0&limit=300`.
 
-## Bootstrap
+La tablet no debe avanzar su cursor reconocido al recibir el pull. Primero aplica todo localmente, después confirma el `nextCursor`. Un pull repetido antes del ACK es correcto y debe ser idempotente por `entityId` + `version`.
 
-```http
-GET /api/v1/sync/bootstrap?page=0&limit=300
-```
+## Importación Excel
 
-Devuelve la copia consolidada completa por páginas. Se solicita `nextPage` hasta que `hasMore` sea
-`false`. Incluye tombstones para preservar eliminaciones lógicas.
+La plantilla versionada se descarga desde `/admin/products/import/template`. Contiene las hojas `Productos`, `Variantes`, `Presentaciones`, `Precios` e `Imagenes`.
 
-## Tipos sincronizables
+Reglas principales:
 
-| Flutter | `entityType` |
-| --- | --- |
-| empresas | `COMPANY` |
-| marcas | `BRAND` |
-| categorias | `CATEGORY` |
-| marca_categorias | `BRAND_CATEGORY` |
-| unidades_medida | `MEASUREMENT_UNIT` |
-| categoria_atributos | `CATEGORY_ATTRIBUTE` |
-| categoria_atributo_opciones | `CATEGORY_ATTRIBUTE_OPTION` |
-| categoria_atributo_unidades | `CATEGORY_ATTRIBUTE_UNIT` |
-| productos | `PRODUCT` |
-| producto_variantes_catalogo | `PRODUCT_VARIANT` |
-| producto_familia_ejes | `PRODUCT_FAMILY_AXIS` |
-| producto_atributos | `PRODUCT_ATTRIBUTE` |
-| producto_atributo_opciones | `PRODUCT_ATTRIBUTE_OPTION` |
-| clientes | `CLIENT` |
-| hojas_pedido | `ORDER_SHEET` |
-| pedidos | `ORDER` |
-| pedido_items | `ORDER_ITEM` |
-| cotizaciones | `QUOTE` |
-| cotizacion_items | `QUOTE_ITEM` |
-| preparacion_productos | `PREPARATION` |
-| preparacion_disponible_movimientos | `PREPARATION_STOCK_MOVEMENT` |
-| pedido_cargas | `ORDER_LOAD` |
-| pedido_historial | `ORDER_HISTORY` |
-| hoja_historial | `ORDER_SHEET_HISTORY` |
+- Solo `.xlsx`, sin macros ni fórmulas; máximo 20 MB y 10 000 filas.
+- El original se conserva temporalmente y se identifica por SHA-256.
+- La vista previa no modifica `products`, `sync_records` ni `sync_change_log`.
+- Crear: `ProductoId` y `Version` vacíos.
+- Actualizar: ambos campos son obligatorios; el código no se usa como identidad de actualización.
+- La confirmación publica cada producto completo en una unidad transaccional independiente.
+- El informe final XLSX conserva acción, estado, mensajes, producto y versión por fila agregada.
+- Los binarios de imágenes se cargan por separado; Excel solo guarda claves relativas.
 
-`sync_queue` no se sincroniza: es una cola local de transporte. Cada fila de negocio debe tener un UUID
-compartido como `sync_id` cuando su clave SQLite actual sea entera.
+## Archivos
+
+La API usa intent → upload → complete:
+
+- `POST /api/v1/files/intents`
+- `PUT /api/v1/files/intents/{id}/content`
+- `POST /api/v1/files/intents/{id}/complete`
+- `GET /api/v1/files/{id}` para privados
+- `GET /public/files/{id}` solo para imágenes de producto declaradas públicas
+
+MySQL conserva metadatos y claves relativas; el contenido se guarda bajo `STORAGE_ROOT`. No se almacenan BLOB ni rutas absolutas.
+
+## Migraciones
+
+`V1` permanece inmutable. La evolución se distribuye en `V2` a `V7`: emparejamiento/auditoría, cursores confirmados, concurrencia/integridad, resolución de conflictos, importaciones/archivos y mantenimiento.
+
+## Operación en Windows
+
+1. Generar el JAR: `.\mvnw.cmd clean package`.
+2. Instalar como servicio desde PowerShell administrador: `.\scripts\install-windows-service.ps1 -JarPath .\target\backend-app-catalogo-0.0.1-SNAPSHOT.jar`.
+3. Crear un respaldo: `.\scripts\backup-mysql.ps1`.
+4. Restaurar deliberadamente: `.\scripts\restore-mysql.ps1 -BackupFile <archivo.sql.zip> -ConfirmRestore`.
 
 ## Pruebas
 
 ```powershell
+$env:JAVA_HOME='D:\java\jdk17'
+$env:MAVEN_OPTS='-Djavax.net.ssl.trustStoreType=Windows-ROOT'
 .\mvnw.cmd test
 ```
 
-Las pruebas usan H2 en modo MySQL y ejecutan la migración Flyway real antes de validar el flujo completo.
+La suite ejecuta Flyway real sobre H2 en modo MySQL y cubre emparejamiento, revocación, idempotencia, reutilización de eventos, concurrencia, conflictos, pull/ACK, bootstrap, producto web, Excel y almacenamiento.

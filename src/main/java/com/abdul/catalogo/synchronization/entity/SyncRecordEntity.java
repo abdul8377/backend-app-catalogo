@@ -8,6 +8,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -53,4 +54,8 @@ public class SyncRecordEntity extends AuditedEntity {
 
     @Column(name = "origin_device_id", length = 36, columnDefinition = "CHAR(36)")
     private String originDeviceId;
+
+    @Version
+    @Column(name = "technical_version", nullable = false)
+    private long technicalVersion;
 }
