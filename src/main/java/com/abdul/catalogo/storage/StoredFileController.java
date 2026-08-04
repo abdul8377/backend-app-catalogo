@@ -9,6 +9,8 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,6 +27,7 @@ public class StoredFileController {
     public StoredFileController(StoredFileService service) { this.service = service; }
 
     @PostMapping("/api/v1/files/intents")
+    @ResponseStatus(HttpStatus.CREATED)
     public FileIntentResponse intent(@Valid @RequestBody FileIntentRequest request) { return service.createIntent(request); }
     @PutMapping("/api/v1/files/intents/{id}/content")
     public StoredFileResponse upload(@PathVariable String id, @RequestParam("file") MultipartFile file) { return service.upload(id, file); }

@@ -10,6 +10,7 @@ import com.abdul.catalogo.storage.dto.StoredFileResponse;
 import com.abdul.catalogo.storage.entity.StoredFileEntity;
 import com.abdul.catalogo.storage.model.FileVisibility;
 import com.abdul.catalogo.storage.model.StoredFileStatus;
+import com.abdul.catalogo.storage.model.StoredFileType;
 import com.abdul.catalogo.storage.repository.StoredFileRepository;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -38,20 +39,26 @@ public class StoredFileService {
     public FileIntentResponse createIntent(FileIntentRequest request) {
         validateIntent(request);
         String id = UUID.randomUUID().toString();
+        Instant now = Instant.now();
         StoredFileEntity file = new StoredFileEntity(); file.setId(id); file.setStorageKey("files/" + id + "/content");
+        file.setFileType(request.fileType());
         file.setOriginalName(safeName(request.fileName())); file.setContentType(request.contentType().toLowerCase());
         file.setSizeBytes(request.sizeBytes()); file.setChecksumSha256(request.checksumSha256().toLowerCase());
         file.setVisibility(request.visibility()); file.setStatus(StoredFileStatus.INTENT);
-        file.setOwnerType(normalize(request.ownerType())); file.setOwnerId(normalize(request.ownerId())); file.setCreatedAt(Instant.now());
+        file.setOwnerType(normalize(request.ownerType())); file.setOwnerId(request.ownerId().trim()); file.setCreatedAt(now);
+        file.setExpiresAt(now.plus(properties.intentDuration()));
         repository.save(file);
-        return new FileIntentResponse(id, "/api/v1/files/intents/" + id + "/content",
-                "/api/v1/files/intents/" + id + "/complete", file.getStatus());
+        return new FileIntentResponse(id, file.getStorageKey(), file.getFileType(), file.getOwnerType(), file.getOwnerId(),
+                file.getContentType(), file.getSizeBytes(), file.getChecksumSha256(), file.getVisibility(), file.getStatus(),
+                file.getExpiresAt(), "/api/v1/files/intents/" + id + "/content",
+                "/api/v1/files/intents/" + id + "/complete");
     }
 
     @Transactional
     public StoredFileResponse upload(String id, MultipartFile upload) {
         StoredFileEntity file = requireForUpdate(id);
         if (file.getStatus() == StoredFileStatus.READY) return response(file);
+        requireActive(file);
         if (upload.getSize() != file.getSizeBytes()) throw new BusinessRuleException("FILE_SIZE_MISMATCH", "El tamaño no coincide con el intent.");
         if (!file.getContentType().equalsIgnoreCase(upload.getContentType())) throw new BusinessRuleException("FILE_MIME_MISMATCH", "El tipo MIME no coincide con el intent.");
         try {
@@ -61,13 +68,15 @@ public class StoredFileService {
         } catch (IOException exception) {
             throw new BusinessRuleException("FILE_STORAGE_ERROR", "No se pudo guardar el archivo.");
         }
-        file.setStatus(StoredFileStatus.UPLOADED);
+        file.setStatus(StoredFileStatus.UPLOADED); file.setUploadedAt(Instant.now());
         return response(file);
     }
 
     @Transactional
     public StoredFileResponse complete(String id) {
         StoredFileEntity file = requireForUpdate(id);
+        if (file.getStatus() == StoredFileStatus.READY) return response(file);
+        requireActive(file);
         if (file.getStatus() == StoredFileStatus.INTENT) throw new BusinessRuleException("FILE_NOT_UPLOADED", "Primero debe cargarse el contenido.");
         file.setStatus(StoredFileStatus.READY); file.setCompletedAt(Instant.now()); return response(file);
     }
@@ -84,13 +93,24 @@ public class StoredFileService {
         if (request.sizeBytes() > properties.maxFileSizeBytes()) throw new BusinessRuleException("FILE_TOO_LARGE", "El archivo supera el máximo permitido.");
         if (!ALLOWED_TYPES.contains(request.contentType().toLowerCase())) throw new BusinessRuleException("FILE_MIME_NOT_ALLOWED", "Tipo de archivo no permitido.");
         String owner = normalize(request.ownerType());
-        if (request.visibility() == FileVisibility.PUBLIC && !Set.of("PRODUCT", "PRODUCT_THUMBNAIL").contains(owner)) {
+        boolean productImage = request.fileType() == StoredFileType.PRODUCT_IMAGE
+                || request.fileType() == StoredFileType.PRODUCT_THUMBNAIL;
+        if (productImage && !request.contentType().toLowerCase().startsWith("image/")) {
+            throw new BusinessRuleException("FILE_TYPE_MISMATCH", "Los archivos de producto deben ser imágenes.");
+        }
+        if (request.visibility() == FileVisibility.PUBLIC && (!productImage || !owner.equals("PRODUCT"))) {
             throw new BusinessRuleException("PUBLIC_FILE_NOT_ALLOWED", "Solo imágenes de producto pueden ser públicas.");
         }
     }
 
     private StoredFileEntity requireForUpdate(String id) { return repository.findForUpdate(id).orElseThrow(() -> new ResourceNotFoundException("FILE_NOT_FOUND", "El archivo no existe.")); }
-    private StoredFileResponse response(StoredFileEntity file) { return new StoredFileResponse(file.getId(), file.getStorageKey(), file.getVisibility() == FileVisibility.PUBLIC ? "/public/files/" + file.getId() : "/api/v1/files/" + file.getId(), file.getContentType(), file.getSizeBytes(), file.getChecksumSha256(), file.getVisibility(), file.getStatus()); }
+    private void requireActive(StoredFileEntity file) {
+        if (file.getStatus() == StoredFileStatus.EXPIRED
+                || (file.getExpiresAt() != null && !file.getExpiresAt().isAfter(Instant.now()))) {
+            throw new BusinessRuleException("FILE_INTENT_EXPIRED", "El intent de carga expiró; solicita uno nuevo.");
+        }
+    }
+    private StoredFileResponse response(StoredFileEntity file) { return new StoredFileResponse(file.getId(), file.getStorageKey(), file.getFileType(), file.getOwnerType(), file.getOwnerId(), file.getVisibility() == FileVisibility.PUBLIC ? "/public/files/" + file.getId() : "/api/v1/files/" + file.getId(), file.getContentType(), file.getSizeBytes(), file.getChecksumSha256(), file.getVisibility(), file.getStatus(), file.getCreatedAt(), file.getExpiresAt(), file.getUploadedAt(), file.getCompletedAt()); }
     private String safeName(String name) { return Path.of(name.replace('\\', '/')).getFileName().toString(); }
     private String normalize(String value) { return value == null ? "" : value.trim().toUpperCase(); }
     public record Download(String fileName, String contentType, Resource resource) {}

@@ -2,6 +2,7 @@ package com.abdul.catalogo.storage.entity;
 
 import com.abdul.catalogo.storage.model.FileVisibility;
 import com.abdul.catalogo.storage.model.StoredFileStatus;
+import com.abdul.catalogo.storage.model.StoredFileType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -19,6 +20,7 @@ import java.time.Instant;
 public class StoredFileEntity {
     @Id @Column(length = 36, columnDefinition = "CHAR(36)") private String id;
     @Column(name = "storage_key", nullable = false, unique = true, length = 500) private String storageKey;
+    @Enumerated(EnumType.STRING) @Column(name = "file_type", nullable = false, length = 40) private StoredFileType fileType;
     @Column(name = "original_name", nullable = false, length = 255) private String originalName;
     @Column(name = "content_type", nullable = false, length = 120) private String contentType;
     @Column(name = "size_bytes", nullable = false) private long sizeBytes;
@@ -28,5 +30,7 @@ public class StoredFileEntity {
     @Column(name = "owner_type", length = 80) private String ownerType;
     @Column(name = "owner_id", length = 160) private String ownerId;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
+    @Column(name = "expires_at") private Instant expiresAt;
+    @Column(name = "uploaded_at") private Instant uploadedAt;
     @Column(name = "completed_at") private Instant completedAt;
 }

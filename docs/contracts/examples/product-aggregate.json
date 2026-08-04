@@ -1,0 +1,55 @@
+{
+  "productId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "code": "FAM-001",
+  "name": "Producto de ejemplo",
+  "description": "",
+  "company": "Empresa",
+  "companyId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "brand": "Marca",
+  "brandId": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  "category": "Categoría",
+  "categoryId": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  "subcategory": "Subcategoría",
+  "subcategoryId": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+  "productType": "SINGLE",
+  "status": "ACTIVE",
+  "attributes": {},
+  "variants": [
+    {
+      "sku": "SKU-001",
+      "supplierCode": "",
+      "shortName": "Producto",
+      "status": "ACTIVE",
+      "attributes": {}
+    }
+  ],
+  "presentations": [
+    {
+      "sku": "SKU-001",
+      "name": "Unidad",
+      "equivalence": 1,
+      "baseUnit": "UND",
+      "minimumSale": 1,
+      "status": "ACTIVE"
+    }
+  ],
+  "prices": [
+    {
+      "sku": "SKU-001",
+      "priceList": "General",
+      "presentation": "Unidad",
+      "currency": "PEN",
+      "taxRate": 18,
+      "price": 10,
+      "quoteRequired": false
+    }
+  ],
+  "images": [
+    {
+      "sku": "",
+      "storageKey": "files/99999999-9999-4999-8999-999999999999/content",
+      "type": "PRODUCT",
+      "primary": true
+    }
+  ]
+}

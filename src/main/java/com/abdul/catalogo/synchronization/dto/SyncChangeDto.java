@@ -12,6 +12,7 @@ public record SyncChangeDto(
         SyncOperation operation,
         long version,
         String originDeviceId,
+        String conflictId,
         JsonNode payload,
         Instant changedAt
 ) {

@@ -27,9 +27,12 @@ app:
     bootstrap-batch-size: 300
   contract:
     version: "1.0"
+    payload-version: 1
+    schema-version: "1.0"
   server:
     name: Catálogo de pruebas
     mdns-enabled: false
+    mdns-bind-address:
     service-type: _appcatalogo._tcp.local.
     public-port: 8081
   pairing:
@@ -41,3 +44,4 @@ app:
   storage:
     root: ${java.io.tmpdir}/app-catalogo-test-storage
     max-file-size-bytes: 26214400
+    intent-duration: PT1H

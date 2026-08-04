@@ -11,7 +11,7 @@ import com.abdul.catalogo.synchronization.dto.SyncStatusResponse;
 import com.abdul.catalogo.synchronization.entity.ChangeLogEntity;
 import com.abdul.catalogo.synchronization.model.ConflictStatus;
 import com.abdul.catalogo.synchronization.repository.ChangeLogRepository;
-import com.abdul.catalogo.synchronization.repository.ProcessedEventRepository;
+import com.abdul.catalogo.synchronization.repository.BootstrapSnapshotRepository;
 import com.abdul.catalogo.synchronization.repository.SyncConflictRepository;
 import com.abdul.catalogo.synchronization.repository.SyncRecordRepository;
 import tools.jackson.core.JacksonException;
@@ -30,24 +30,22 @@ public class SyncReadService {
     private final SyncProperties properties;
     private final ChangeLogRepository changeRepository;
     private final SyncRecordRepository recordRepository;
-    private final ProcessedEventRepository eventRepository;
+    private final BootstrapSnapshotRepository bootstrapRepository;
     private final SyncConflictRepository conflictRepository;
-    private final SyncEntityCatalog entityCatalog;
     private final DeviceService deviceService;
     private final ObjectMapper objectMapper;
     private final ServerIdentityService identityService;
 
     public SyncReadService(SyncProperties properties, ChangeLogRepository changeRepository,
-                           SyncRecordRepository recordRepository, ProcessedEventRepository eventRepository,
-                           SyncConflictRepository conflictRepository, SyncEntityCatalog entityCatalog,
+                           SyncRecordRepository recordRepository, BootstrapSnapshotRepository bootstrapRepository,
+                           SyncConflictRepository conflictRepository,
                            DeviceService deviceService, ObjectMapper objectMapper,
                            ServerIdentityService identityService) {
         this.properties = properties;
         this.changeRepository = changeRepository;
         this.recordRepository = recordRepository;
-        this.eventRepository = eventRepository;
+        this.bootstrapRepository = bootstrapRepository;
         this.conflictRepository = conflictRepository;
-        this.entityCatalog = entityCatalog;
         this.deviceService = deviceService;
         this.objectMapper = objectMapper;
         this.identityService = identityService;
@@ -86,21 +84,21 @@ public class SyncReadService {
         if (requestedSnapshotCursor != null && (requestedSnapshotCursor < 0 || requestedSnapshotCursor > latestCursor)) {
             throw new BusinessRuleException("INVALID_BOOTSTRAP_SNAPSHOT", "snapshotCursor no existe en el servidor.");
         }
-        var page = recordRepository.findBootstrapPage(PageRequest.of(pageNumber, limit));
-        List<BootstrapRecordDto> records = page.getContent().stream()
-                .map(record -> new BootstrapRecordDto(record.getEntityType(), record.getEntityId(), record.getVersion(),
-                        record.isDeleted(), read(record.getPayloadJson()), record.getUpdatedAt()))
-                .toList();
         long snapshotCursor = requestedSnapshotCursor == null ? latestCursor : requestedSnapshotCursor;
-        return new SyncBootstrapResponse(pageNumber, pageNumber + 1, page.hasNext(), snapshotCursor, records);
+        var page = bootstrapRepository.findPage(snapshotCursor, pageNumber, limit);
+        List<BootstrapRecordDto> records = page.records().stream()
+                .map(record -> new BootstrapRecordDto(record.entityType(), record.entityId(), record.version(),
+                        record.deleted(), read(record.payloadJson()), record.updatedAt()))
+                .toList();
+        return new SyncBootstrapResponse(pageNumber, pageNumber + 1, page.hasMore(), snapshotCursor, records);
     }
 
     @Transactional(readOnly = true)
     public SyncStatusResponse status() {
         var discovery = identityService.discovery();
         return new SyncStatusResponse(discovery.serverId(), discovery.apiContractVersion(),
-                recordRepository.count(), changeRepository.count(), eventRepository.count(),
-                conflictRepository.countByStatus(ConflictStatus.PENDING), entityCatalog.supportedTypes(), Instant.now());
+                recordRepository.count(), changeRepository.count(),
+                conflictRepository.countByStatus(ConflictStatus.PENDING));
     }
 
     private long latestCursor() {
@@ -111,7 +109,7 @@ public class SyncReadService {
     private SyncChangeDto toChange(ChangeLogEntity change) {
         return new SyncChangeDto(change.getSequence(), change.getEntityType(), change.getEntityId(),
                 change.getOperation(), change.getVersion(), change.getOriginDeviceId(),
-                read(change.getPayloadJson()), change.getChangedAt());
+                change.getConflictId(), read(change.getPayloadJson()), change.getChangedAt());
     }
 
     private JsonNode read(String json) {

@@ -1,0 +1,8 @@
+{
+  "serverId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "serverName": "Catálogo oficina principal",
+  "serviceType": "_appcatalogo._tcp.local.",
+  "port": 8081,
+  "apiContractVersion": "1.0",
+  "pairingAvailable": true
+}

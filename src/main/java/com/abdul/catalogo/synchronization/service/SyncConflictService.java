@@ -42,22 +42,24 @@ public class SyncConflictService {
         SyncConflictEntity conflict = repository.findForUpdate(id)
                 .orElseThrow(() -> new ResourceNotFoundException("CONFLICT_NOT_FOUND", "El conflicto no existe."));
         if (conflict.getStatus() != ConflictStatus.PENDING) return response(conflict);
-        JsonNode selected = null;
+        JsonNode selected = read(conflict.getServerPayload());
         if (resolution == ConflictResolution.ACCEPT_TABLET) selected = read(conflict.getClientPayload());
         if (resolution == ConflictResolution.MERGE) {
             selected = read(mergePayload);
             if (!selected.isObject()) throw new BusinessRuleException("INVALID_MERGE_PAYLOAD", "El payload combinado debe ser un objeto JSON.");
         }
-        if (selected != null) {
-            var published = publisher.publish(conflict.getEntityType(), conflict.getEntityId(), SyncOperation.UPSERT,
-                    selected, "server-conflict", conflict.getServerVersion());
-            if (conflict.getEntityType().equals("PRODUCT")) {
-                productProjectionService.validateUpsert(conflict.getEntityId(), selected);
-                productProjectionService.apply(conflict.getEntityId(), selected, published.version(), "server-conflict", false);
-            }
-            conflict.setResolutionPayload(write(selected));
-            conflict.setResolutionEventId(UUID.randomUUID().toString());
+        if (conflict.getEntityType().equals("PRODUCT")) {
+            productProjectionService.validateUpsert(conflict.getEntityId(), selected);
         }
+        var published = publisher.publish(conflict.getEntityType(), conflict.getEntityId(), SyncOperation.UPSERT,
+                selected, "server-conflict", conflict.getServerVersion(), conflict.getId());
+        if (conflict.getEntityType().equals("PRODUCT")) {
+            productProjectionService.apply(conflict.getEntityId(), selected, published.version(), "server-conflict", false);
+        }
+        conflict.setResolutionPayload(write(selected));
+        conflict.setResolutionEventId(UUID.randomUUID().toString());
+        conflict.setResolutionVersion(published.version());
+        conflict.setResolutionSequence(published.sequence());
         conflict.setResolution(resolution.name()); conflict.setResolvedBy(actor); conflict.setResolvedAt(Instant.now());
         conflict.setStatus(switch (resolution) {
             case KEEP_SERVER -> ConflictStatus.RESOLVED_SERVER;
@@ -71,7 +73,8 @@ public class SyncConflictService {
         return new SyncConflictResponse(conflict.getId(), conflict.getEntityType(), conflict.getEntityId(),
                 conflict.getServerVersion(), conflict.getClientBaseVersion(), read(conflict.getServerPayload()),
                 read(conflict.getClientPayload()), conflict.getOriginDeviceId(), conflict.getStatus(), conflict.getCreatedAt(),
-                conflict.getResolvedAt(), conflict.getResolvedBy(), conflict.getResolution());
+                conflict.getResolvedAt(), conflict.getResolvedBy(), conflict.getResolution(),
+                conflict.getResolutionVersion(), conflict.getResolutionSequence());
     }
     private JsonNode read(String json) { try { return objectMapper.readTree(json == null || json.isBlank() ? "{}" : json); } catch (JacksonException e) { throw new BusinessRuleException("INVALID_JSON", "El conflicto contiene JSON inválido."); } }
     private String write(JsonNode node) { try { return objectMapper.writeValueAsString(node); } catch (JacksonException e) { throw new IllegalStateException(e); } }

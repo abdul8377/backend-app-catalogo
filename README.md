@@ -8,11 +8,11 @@ Servidor local Spring Boot para la aplicación Flutter offline-first. MySQL cons
 - Emparejamiento mediante código y QR de un solo uso con vencimiento, token por dispositivo, rotación, revocación y auditoría.
 - Push por lotes con contrato versionado, idempotencia, checksum, rechazo de reutilización de `eventId` y conflictos de versión.
 - Pull incremental con cursor entregado y confirmación separada mediante ACK.
-- Bootstrap completo paginado en orden de dependencias, con tombstones y cursor de inicio para el pull posterior.
+- Bootstrap paginado por snapshot (`last_sequence`), en orden completo de dependencias y con tombstones.
 - Escritura protegida con bloqueo por entidad, lock pesimista y versión técnica optimista.
 - Producto como agregado: clasificación estable, variantes, atributos, presentaciones, precios e imágenes.
 - CRUD web de productos, importación Excel con vista previa, confirmación por producto e informe XLSX.
-- Almacenamiento local abstraído, claves relativas y carga de archivos en dos pasos.
+- Almacenamiento local abstraído, claves relativas, intents con expiración y carga en tres pasos.
 - Resolución web de conflictos, retención temporal, health/info, request ID, logs rotativos y scripts de respaldo/restauración.
 
 No se crean CRUD web para empresas, marcas, categorías, clientes, pedidos, cotizaciones, preparación, cargas ni historiales. Esas entidades viajan por sincronización.
@@ -31,6 +31,9 @@ $env:ADMIN_USERNAME='admin'
 $env:ADMIN_PASSWORD='admin'
 $env:STORAGE_ROOT='D:/AppCatalogoStorage'
 $env:SERVER_NAME='Catálogo oficina principal'
+$env:SERVER_PORT='8081'
+# Opcional si la PC tiene VPN o varios adaptadores:
+# $env:MDNS_BIND_ADDRESS='192.168.1.20'
 .\mvnw.cmd spring-boot:run
 ```
 
@@ -68,7 +71,7 @@ El token de la respuesta se muestra una vez. Las llamadas privadas usan `X-Devic
 
 ## Sincronización
 
-El contrato congelado está documentado en [docs/sync-contract-v1.md](docs/sync-contract-v1.md).
+El único contrato oficial está documentado en [docs/sync-contract-v1.md](docs/sync-contract-v1.md). Los JSON consumibles por backend y Flutter están en [docs/contracts/examples](docs/contracts/examples).
 
 - Tablet → PC: `POST /api/v1/sync/push`.
 - PC → tablet: `GET /api/v1/sync/pull?after=0&limit=300`.
@@ -102,18 +105,20 @@ La API usa intent → upload → complete:
 - `GET /api/v1/files/{id}` para privados
 - `GET /public/files/{id}` solo para imágenes de producto declaradas públicas
 
-MySQL conserva metadatos y claves relativas; el contenido se guarda bajo `STORAGE_ROOT`. No se almacenan BLOB ni rutas absolutas.
+MySQL conserva propietario, tipo lógico, MIME, tamaño, checksum, visibilidad, estado, expiración y claves relativas. El contenido se guarda bajo `STORAGE_ROOT`; no se almacenan BLOB ni rutas absolutas. Un intent incompleto expira después de una hora y su contenido parcial es eliminado.
 
 ## Migraciones
 
-`V1` permanece inmutable. La evolución se distribuye en `V2` a `V7`: emparejamiento/auditoría, cursores confirmados, concurrencia/integridad, resolución de conflictos, importaciones/archivos y mantenimiento.
+`V1`–`V7` permanecen inmutables. `V8` agrega el snapshot estable por secuencia, correlación de conflictos y metadatos/expiración de archivos.
 
 ## Operación en Windows
 
 1. Generar el JAR: `.\mvnw.cmd clean package`.
 2. Instalar como servicio desde PowerShell administrador: `.\scripts\install-windows-service.ps1 -JarPath .\target\backend-app-catalogo-0.0.1-SNAPSHOT.jar`.
-3. Crear un respaldo: `.\scripts\backup-mysql.ps1`.
-4. Restaurar deliberadamente: `.\scripts\restore-mysql.ps1 -BackupFile <archivo.sql.zip> -ConfirmRestore`.
+3. El instalador abre únicamente en perfil privado TCP 8081 entrada y UDP 5353 entrada/salida; nunca abre MySQL 3306.
+4. Desinstalar servicio y reglas: `.\scripts\uninstall-windows-service.ps1`.
+5. Crear un respaldo: `.\scripts\backup-mysql.ps1`.
+6. Restaurar deliberadamente: `.\scripts\restore-mysql.ps1 -BackupFile <archivo.sql.zip> -ConfirmRestore`.
 
 ## Pruebas
 
@@ -123,4 +128,4 @@ $env:MAVEN_OPTS='-Djavax.net.ssl.trustStoreType=Windows-ROOT'
 .\mvnw.cmd test
 ```
 
-La suite ejecuta Flyway real sobre H2 en modo MySQL y cubre emparejamiento, revocación, idempotencia, reutilización de eventos, concurrencia, conflictos, pull/ACK, bootstrap, producto web, Excel y almacenamiento.
+La suite ejecuta Flyway real sobre H2 en modo MySQL y cubre fixtures contractuales, emparejamiento, revocación, idempotencia, versiones, conflictos correlacionados, pull/ACK, snapshot de bootstrap, PRODUCT agregado, producto web, Excel y expiración de archivos.

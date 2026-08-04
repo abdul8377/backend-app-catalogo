@@ -1,0 +1,12 @@
+{
+  "results": [
+    {
+      "eventId": "22222222-2222-4222-8222-222222222222",
+      "status": "ACCEPTED",
+      "version": 3,
+      "sequence": 123,
+      "conflictId": null,
+      "message": null
+    }
+  ]
+}

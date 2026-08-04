@@ -70,4 +70,10 @@ public class SyncConflictEntity {
 
     @Column(name = "resolution_event_id", length = 36, columnDefinition = "CHAR(36)")
     private String resolutionEventId;
+
+    @Column(name = "resolution_version")
+    private Long resolutionVersion;
+
+    @Column(name = "resolution_sequence")
+    private Long resolutionSequence;
 }

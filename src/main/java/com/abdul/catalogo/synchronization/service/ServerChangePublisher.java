@@ -36,6 +36,12 @@ public class ServerChangePublisher {
     @Transactional(propagation = Propagation.MANDATORY)
     public PublishedChange publish(String entityType, String entityId, SyncOperation operation,
                                    JsonNode payload, String origin, Long expectedVersion) {
+        return publish(entityType, entityId, operation, payload, origin, expectedVersion, null);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public PublishedChange publish(String entityType, String entityId, SyncOperation operation,
+                                   JsonNode payload, String origin, Long expectedVersion, String conflictId) {
         String normalizedType = entityType.trim().toUpperCase();
         SyncRecordEntity record = recordRepository.findForUpdate(normalizedType, entityId)
                 .orElseGet(() -> newRecord(normalizedType, entityId));
@@ -58,9 +64,12 @@ public class ServerChangePublisher {
         change.setOperation(operation);
         change.setVersion(version);
         change.setOriginDeviceId(origin);
+        change.setConflictId(conflictId);
         change.setPayloadJson(json);
         change.setChangedAt(Instant.now());
         change = changeRepository.saveAndFlush(change);
+        record.setLastSequence(change.getSequence());
+        recordRepository.save(record);
         return new PublishedChange(version, change.getSequence());
     }
 

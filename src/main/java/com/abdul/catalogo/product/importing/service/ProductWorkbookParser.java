@@ -90,9 +90,13 @@ public class ProductWorkbookParser {
             put(aggregate, "name", product.value("nombre"));
             put(aggregate, "description", product.value("descripcion"));
             put(aggregate, "company", product.value("empresa"));
+            put(aggregate, "companyId", "");
             put(aggregate, "brand", product.value("marca"));
+            put(aggregate, "brandId", "");
             put(aggregate, "category", product.value("categoria"));
+            put(aggregate, "categoryId", "");
             put(aggregate, "subcategory", product.value("subcategoria"));
+            put(aggregate, "subcategoryId", "");
             put(aggregate, "productType", enumValue(product.value("tipo"), ProductType.SINGLE.name(), ProductType.class, errors));
             put(aggregate, "status", enumValue(product.value("estado"), ProductStatus.ACTIVE.name(), ProductStatus.class, errors));
             aggregate.set("attributes", json(product.value("atributosjson"), true, "AtributosJson", errors));

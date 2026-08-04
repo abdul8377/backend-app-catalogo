@@ -1,0 +1,19 @@
+{
+  "page": 0,
+  "nextPage": 1,
+  "hasMore": false,
+  "snapshotCursor": 124,
+  "records": [
+    {
+      "entityType": "CLIENT",
+      "entityId": "33333333-3333-4333-8333-333333333333",
+      "version": 4,
+      "deleted": false,
+      "payload": {
+        "clientId": "33333333-3333-4333-8333-333333333333",
+        "name": "Cliente actualizado"
+      },
+      "updatedAt": "2026-08-04T20:05:00Z"
+    }
+  ]
+}

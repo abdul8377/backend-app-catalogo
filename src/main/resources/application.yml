@@ -1,6 +1,6 @@
 server:
   address: 0.0.0.0
-  port: 8081
+  port: ${SERVER_PORT:8081}
 
 spring:
   application:
@@ -30,9 +30,12 @@ app:
     password: ${ADMIN_PASSWORD:admin}
   contract:
     version: "1.0"
+    payload-version: 1
+    schema-version: "1.0"
   server:
     name: ${SERVER_NAME:Catálogo Comercial}
     mdns-enabled: ${MDNS_ENABLED:true}
+    mdns-bind-address: ${MDNS_BIND_ADDRESS:}
     service-type: _appcatalogo._tcp.local.
     public-port: ${SERVER_PORT:8081}
   pairing:
@@ -48,6 +51,7 @@ app:
   storage:
     root: ${STORAGE_ROOT:D:/AppCatalogoStorage}
     max-file-size-bytes: 26214400
+    intent-duration: PT1H
 
 management:
   endpoints:

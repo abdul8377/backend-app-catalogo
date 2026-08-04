@@ -6,12 +6,14 @@ import com.abdul.catalogo.synchronization.dto.SyncEventRequest;
 import com.abdul.catalogo.synchronization.dto.SyncPushRequest;
 import com.abdul.catalogo.synchronization.model.SyncOperation;
 import com.abdul.catalogo.synchronization.model.SyncResultStatus;
+import com.abdul.catalogo.synchronization.model.ConflictResolution;
 import com.abdul.catalogo.synchronization.repository.PairingCodeRepository;
 import com.abdul.catalogo.synchronization.repository.ChangeLogRepository;
 import com.abdul.catalogo.synchronization.service.DeviceService;
 import com.abdul.catalogo.synchronization.service.PairingCodeService;
 import com.abdul.catalogo.synchronization.service.SyncPushService;
 import com.abdul.catalogo.synchronization.service.SyncReadService;
+import com.abdul.catalogo.synchronization.service.SyncConflictService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -49,6 +51,7 @@ class SecureSyncContractIntegrationTest {
     @Autowired SyncPushService pushService;
     @Autowired SyncReadService readService;
     @Autowired ChangeLogRepository changeLogRepository;
+    @Autowired SyncConflictService conflictService;
 
     @Test
     void pairingCodeIsRequiredSingleUseAndRevocationInvalidatesToken() throws Exception {
@@ -57,6 +60,11 @@ class SecureSyncContractIntegrationTest {
                 .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("INVALID_PAIRING_CODE"));
 
         var pairing = pairingCodeService.create("admin-test");
+        var qr = objectMapper.readTree(pairing.qrPayload());
+        assertThat(qr.propertyNames()).containsExactlyInAnyOrder(
+                "serverId", "serverName", "pairingCode", "serviceType", "apiContractVersion");
+        assertThat(qr.has("host")).isFalse();
+        assertThat(qr.has("ip")).isFalse();
         String registration = mockMvc.perform(post("/api/v1/devices/register").contentType(MediaType.APPLICATION_JSON)
                         .content(registrationJson(pairing.pairingCode())))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.bootstrapStatus").value("REQUIRED"))
@@ -143,6 +151,70 @@ class SecureSyncContractIntegrationTest {
         assertThat(ids.indexOf(companyId)).isLessThan(ids.indexOf(brandId));
         assertThat(ids.indexOf(brandId)).isLessThan(ids.indexOf(categoryId));
         assertThat(bootstrap.records().stream().filter(record -> record.entityId().equals(categoryId)).findFirst().orElseThrow().deleted()).isTrue();
+    }
+
+    @Test
+    void bootstrapKeepsTheRequestedSnapshotAndLaterChangesArriveByPull() {
+        DeviceRegistrationResponse device = register("snapshot");
+        String entityId = UUID.randomUUID().toString();
+        var created = pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0",
+                List.of(event(UUID.randomUUID().toString(), "COMPANY", entityId, 0, SyncOperation.UPSERT, "Inicial"))))
+                .results().get(0);
+        long snapshotCursor = created.sequence();
+        assertThat(readService.bootstrap(0, 300, snapshotCursor).records())
+                .anyMatch(record -> record.entityId().equals(entityId) && record.version() == 1);
+
+        pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0",
+                List.of(event(UUID.randomUUID().toString(), "COMPANY", entityId, 1, SyncOperation.UPSERT, "Modificada"))));
+
+        assertThat(readService.bootstrap(0, 300, snapshotCursor).records())
+                .anyMatch(record -> record.entityId().equals(entityId) && record.version() == 1
+                        && record.payload().path("name").asText().equals("Inicial"));
+        assertThat(readService.pull(device.deviceId(), snapshotCursor, 300).changes())
+                .anyMatch(change -> change.entityId().equals(entityId) && change.version() == 2);
+    }
+
+    @Test
+    void conflictIdSurvivesIdempotentReplayResolutionAndPull() {
+        DeviceRegistrationResponse device = register("conflict-correlation");
+        String entityId = UUID.randomUUID().toString();
+        var accepted = pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0",
+                List.of(event(UUID.randomUUID().toString(), "COMPANY", entityId, 0, SyncOperation.UPSERT, "Servidor"))))
+                .results().get(0);
+        String eventId = UUID.randomUUID().toString();
+        SyncEventRequest stale = event(eventId, "COMPANY", entityId, 0, SyncOperation.UPSERT, "Tablet");
+        var conflict = pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0", List.of(stale)))
+                .results().get(0);
+        var replay = pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0", List.of(stale)))
+                .results().get(0);
+
+        assertThat(conflict.conflictId()).isNotBlank();
+        assertThat(replay.conflictId()).isEqualTo(conflict.conflictId());
+        var resolved = conflictService.resolve(conflict.conflictId(), ConflictResolution.KEEP_SERVER, "", "admin");
+        assertThat(resolved.conflictId()).isEqualTo(conflict.conflictId());
+        assertThat(resolved.resolutionVersion()).isEqualTo(2);
+        assertThat(resolved.resolutionSequence()).isGreaterThan(accepted.sequence());
+        assertThat(readService.pull(device.deviceId(), accepted.sequence(), 300).changes())
+                .anyMatch(change -> conflict.conflictId().equals(change.conflictId()) && change.version() == 2);
+    }
+
+    @Test
+    void obsoleteProductPartsAndIncompatibleEventVersionsAreRejectedIndividually() {
+        DeviceRegistrationResponse device = register("contract-rejections");
+        String entityId = UUID.randomUUID().toString();
+        var obsolete = event(UUID.randomUUID().toString(), "PRODUCT_VARIANT", entityId, 0,
+                SyncOperation.UPSERT, "Variante antigua");
+        var wrongVersion = new SyncEventRequest(UUID.randomUUID().toString(), "COMPANY", UUID.randomUUID().toString(),
+                SyncOperation.UPSERT, 0, 2, "2.0", null, Instant.now(),
+                objectMapper.valueToTree(Map.of("name", "Versión incompatible")));
+
+        var response = pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0",
+                List.of(obsolete, wrongVersion)));
+
+        assertThat(response.results()).extracting(result -> result.status())
+                .containsExactly(SyncResultStatus.REJECTED, SyncResultStatus.REJECTED);
+        assertThat(response.results().get(0).message()).contains("no está habilitado");
+        assertThat(response.results().get(1).message()).contains("payloadVersion");
     }
 
     private DeviceRegistrationResponse register(String suffix) {

@@ -6,8 +6,13 @@ import com.abdul.catalogo.product.repository.ProductRepository;
 import com.abdul.catalogo.shared.crypto.Digests;
 import com.abdul.catalogo.shared.exception.ResourceNotFoundException;
 import com.abdul.catalogo.storage.StoredFileService;
+import com.abdul.catalogo.storage.StorageService;
 import com.abdul.catalogo.storage.dto.FileIntentRequest;
 import com.abdul.catalogo.storage.model.FileVisibility;
+import com.abdul.catalogo.storage.model.StoredFileType;
+import com.abdul.catalogo.storage.model.StoredFileStatus;
+import com.abdul.catalogo.storage.StoredFileRetentionService;
+import com.abdul.catalogo.storage.repository.StoredFileRepository;
 import com.abdul.catalogo.synchronization.repository.ChangeLogRepository;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -34,6 +39,9 @@ class ProductImportAndStorageIntegrationTest {
     @Autowired ProductRepository productRepository;
     @Autowired ChangeLogRepository changeRepository;
     @Autowired StoredFileService storedFileService;
+    @Autowired StorageService storageService;
+    @Autowired StoredFileRepository storedFileRepository;
+    @Autowired StoredFileRetentionService storedFileRetentionService;
 
     @Test
     void previewDoesNotPublishAndConfirmationIsIdempotent() throws Exception {
@@ -75,18 +83,40 @@ class ProductImportAndStorageIntegrationTest {
     @Test
     void fileIntentChecksChecksumAndVisibility() throws Exception {
         byte[] bytes = "imagen-ficticia".getBytes(StandardCharsets.UTF_8); String checksum = Digests.sha256(bytes);
-        var intent = storedFileService.createIntent(new FileIntentRequest("foto.png", "image/png", bytes.length,
+        var intent = storedFileService.createIntent(new FileIntentRequest("foto.png", StoredFileType.PRODUCT_IMAGE, "image/png", bytes.length,
                 checksum, FileVisibility.PUBLIC, "PRODUCT", UUID.randomUUID().toString()));
         var upload = new MockMultipartFile("file", "foto.png", "image/png", bytes);
         storedFileService.upload(intent.fileId(), upload); var ready = storedFileService.complete(intent.fileId());
         assertThat(ready.storageKey()).doesNotContain(":").doesNotContain("..");
         assertThat(storedFileService.download(intent.fileId(), true).resource().getInputStream().readAllBytes()).isEqualTo(bytes);
 
-        var privateIntent = storedFileService.createIntent(new FileIntentRequest("cotizacion.pdf", "application/pdf", bytes.length,
+        var privateIntent = storedFileService.createIntent(new FileIntentRequest("cotizacion.pdf", StoredFileType.DOCUMENT, "application/pdf", bytes.length,
                 checksum, FileVisibility.PRIVATE, "QUOTE", UUID.randomUUID().toString()));
         storedFileService.upload(privateIntent.fileId(), new MockMultipartFile("file", "cotizacion.pdf", "application/pdf", bytes));
         storedFileService.complete(privateIntent.fileId());
         assertThatThrownBy(() -> storedFileService.download(privateIntent.fileId(), true)).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void incompleteUploadExpiresAndCannotBeCompleted() {
+        byte[] bytes = "upload-incompleto".getBytes(StandardCharsets.UTF_8);
+        var intent = storedFileService.createIntent(new FileIntentRequest("foto.png", StoredFileType.PRODUCT_IMAGE,
+                "image/png", bytes.length, Digests.sha256(bytes), FileVisibility.PRIVATE,
+                "PRODUCT", UUID.randomUUID().toString()));
+        storedFileService.upload(intent.fileId(),
+                new MockMultipartFile("file", "foto.png", "image/png", bytes));
+        var entity = storedFileRepository.findById(intent.fileId()).orElseThrow();
+        entity.setExpiresAt(java.time.Instant.now().minusSeconds(1));
+        storedFileRepository.saveAndFlush(entity);
+
+        storedFileRetentionService.expireIncompleteUploads();
+
+        assertThat(storedFileRepository.findById(intent.fileId()).orElseThrow().getStatus())
+                .isEqualTo(StoredFileStatus.EXPIRED);
+        assertThatThrownBy(() -> storedFileService.complete(intent.fileId()))
+                .hasMessageContaining("expiró");
+        assertThatThrownBy(() -> storageService.load(intent.storageKey()))
+                .hasMessageContaining("no existe");
     }
 
     private byte[] populatedTemplate(String code) throws Exception {

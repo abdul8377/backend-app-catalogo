@@ -5,8 +5,8 @@ import com.abdul.catalogo.synchronization.model.SyncResultStatus;
 public record SyncEventResult(
         String eventId,
         SyncResultStatus status,
-        Long serverVersion,
-        Long serverSequence,
+        Long version,
+        Long sequence,
         String conflictId,
         String message
 ) {

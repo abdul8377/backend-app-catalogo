@@ -74,6 +74,10 @@ class SyncFlowIntegrationTest {
         mockMvc.perform(authenticated(post("/api/v1/sync/push")).contentType(MediaType.APPLICATION_JSON)
                         .content(push(companyEvent, productEvent))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.results[0].status").value("ACCEPTED"))
+                .andExpect(jsonPath("$.results[0].version").value(1))
+                .andExpect(jsonPath("$.results[0].sequence").isNumber())
+                .andExpect(jsonPath("$.results[0].serverVersion").doesNotExist())
+                .andExpect(jsonPath("$.results[0].serverSequence").doesNotExist())
                 .andExpect(jsonPath("$.results[1].status").value("ACCEPTED"));
         mockMvc.perform(authenticated(post("/api/v1/sync/push")).contentType(MediaType.APPLICATION_JSON)
                         .content(push(productEvent))).andExpect(status().isOk())
@@ -86,13 +90,45 @@ class SyncFlowIntegrationTest {
                 .andExpect(jsonPath("$.results[0].status").value("CONFLICT"))
                 .andExpect(jsonPath("$.results[0].conflictId").isNotEmpty());
 
-        long expectedCursor = initialChanges + 2;
-        mockMvc.perform(authenticated(get("/api/v1/sync/pull")).param("after", Long.toString(initialChanges)).param("limit", "300"))
+        mockMvc.perform(get("/admin/products/{id}/edit", productId).with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/admin/products/{id}", productId).with(user("admin").roles("ADMIN")).with(csrf())
+                        .param("code", "TAB-001").param("name", "Taladro actualizado en PC")
+                        .param("description", "Debe llegar completo a la tablet").param("company", "Empresa Demo")
+                        .param("companyId", "company-demo").param("brand", "Marca Demo").param("brandId", "brand-demo")
+                        .param("category", "Taladros").param("categoryId", "category-demo").param("subcategory", "")
+                        .param("subcategoryId", "").param("productType", "SINGLE").param("status", "ACTIVE")
+                        .param("version", "1").param("attributesJson", "{}")
+                        .param("variantsJson", "[{\"sku\":\"TAB-001\",\"shortName\":\"Taladro PC\",\"status\":\"ACTIVE\",\"attributes\":{}}]")
+                        .param("presentationsJson", "[]")
+                        .param("pricesJson", "[{\"sku\":\"TAB-001\",\"priceList\":\"General\",\"currency\":\"PEN\",\"price\":149.90,\"quoteRequired\":false}]")
+                        .param("imagesJson", "[]"))
+                .andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/admin/products"));
+
+        long expectedCursor = initialChanges + 3;
+        String pullJson = mockMvc.perform(authenticated(get("/api/v1/sync/pull"))
+                        .param("after", Long.toString(initialChanges)).param("limit", "300"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.nextCursor").value(expectedCursor))
-                .andExpect(jsonPath("$.changes.length()").value(2));
+                .andExpect(jsonPath("$.changes.length()").value(3))
+                .andReturn().getResponse().getContentAsString();
+        JsonNode webUpdate = objectMapper.readTree(pullJson).path("changes").valueStream()
+                .filter(change -> productId.equals(change.path("entityId").asText()) && change.path("version").asLong() == 2)
+                .findFirst().orElseThrow();
+        assertThat(webUpdate.path("payload").propertyNames()).containsExactlyInAnyOrder(
+                "productId", "code", "name", "description", "company", "companyId", "brand", "brandId",
+                "category", "categoryId", "subcategory", "subcategoryId", "productType", "status",
+                "attributes", "variants", "presentations", "prices", "images");
+        assertThat(webUpdate.path("payload").path("name").asText()).isEqualTo("Taladro actualizado en PC");
+        assertThat(webUpdate.path("payload").path("variants").get(0).path("shortName").asText()).isEqualTo("Taladro PC");
+        assertThat(webUpdate.path("payload").path("prices").get(0).path("price").decimalValue())
+                .isEqualByComparingTo("149.90");
         mockMvc.perform(authenticated(post("/api/v1/sync/pull/ack")).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"cursor\":" + expectedCursor + "}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.acknowledgedCursor").value(expectedCursor));
+        mockMvc.perform(authenticated(get("/api/v1/sync/pull"))
+                        .param("after", Long.toString(expectedCursor)).param("limit", "300"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.changes.length()").value(0))
+                .andExpect(jsonPath("$.nextCursor").value(expectedCursor));
 
         mockMvc.perform(get("/admin/products/new").with(user("admin").roles("ADMIN"))).andExpect(status().isOk());
         mockMvc.perform(post("/admin/products").with(user("admin").roles("ADMIN")).with(csrf())
@@ -107,7 +143,7 @@ class SyncFlowIntegrationTest {
         mockMvc.perform(authenticated(get("/api/v1/sync/bootstrap")).param("page", "0").param("limit", "300"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.snapshotCursor").isNumber());
         assertThat(recordRepository.count()).isEqualTo(initialRecords + 3);
-        assertThat(changeRepository.count()).isEqualTo(initialChanges + 3);
+        assertThat(changeRepository.count()).isEqualTo(initialChanges + 4);
         assertThat(productRepository.count()).isEqualTo(initialProducts + 2);
         assertThat(conflictRepository.count()).isEqualTo(initialConflicts + 1);
         assertThat(eventRepository.count()).isEqualTo(initialEvents + 3);
@@ -118,9 +154,25 @@ class SyncFlowIntegrationTest {
         mockMvc.perform(get("/api/v1/sync/status")).andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void statusUsesTheFrozenInitializationFieldNames() throws Exception {
+        mockMvc.perform(authenticated(get("/api/v1/sync/status")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.serverId").isNotEmpty())
+                .andExpect(jsonPath("$.apiContractVersion").value("1.0"))
+                .andExpect(jsonPath("$.recordCount").isNumber())
+                .andExpect(jsonPath("$.changeCount").isNumber())
+                .andExpect(jsonPath("$.pendingConflictCount").isNumber())
+                .andExpect(jsonPath("$.records").doesNotExist())
+                .andExpect(jsonPath("$.changes").doesNotExist());
+    }
+
     private Map<String, Object> productPayload(String id, String code, String name) {
         return Map.ofEntries(Map.entry("productId", id), Map.entry("code", code), Map.entry("name", name),
-                Map.entry("company", "Empresa Demo"), Map.entry("brand", "Marca Demo"), Map.entry("category", "Taladros"),
+                Map.entry("description", ""), Map.entry("company", "Empresa Demo"), Map.entry("companyId", "company-demo"),
+                Map.entry("brand", "Marca Demo"), Map.entry("brandId", "brand-demo"),
+                Map.entry("category", "Taladros"), Map.entry("categoryId", "category-demo"),
+                Map.entry("subcategory", ""), Map.entry("subcategoryId", ""),
                 Map.entry("status", "ACTIVE"), Map.entry("productType", "SINGLE"), Map.entry("attributes", Map.of()),
                 Map.entry("variants", List.of(Map.of("sku", code, "shortName", name, "status", "ACTIVE", "attributes", Map.of()))),
                 Map.entry("presentations", List.of()), Map.entry("prices", List.of()), Map.entry("images", List.of()));

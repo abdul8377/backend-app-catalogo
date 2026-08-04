@@ -16,6 +16,10 @@ import java.util.Set;
 
 @Service
 public class ProductProjectionService {
+    private static final Set<String> PRODUCT_FIELDS = Set.of(
+            "productId", "code", "name", "description", "company", "companyId", "brand", "brandId",
+            "category", "categoryId", "subcategory", "subcategoryId", "productType", "status",
+            "attributes", "variants", "presentations", "prices", "images");
     private final ProductRepository productRepository;
     private final ObjectMapper objectMapper;
 
@@ -26,8 +30,19 @@ public class ProductProjectionService {
 
     public void validateUpsert(String productId, JsonNode payload) {
         JsonNode aggregate = aggregate(payload);
-        String code = text(aggregate, "code", "codigo");
-        String name = text(aggregate, "name", "nombre");
+        if (aggregate == null || !aggregate.isObject()) {
+            throw new BusinessRuleException("INVALID_PRODUCT_AGGREGATE", "PRODUCT debe ser un objeto JSON completo.");
+        }
+        if (!Set.copyOf(aggregate.propertyNames()).equals(PRODUCT_FIELDS)) {
+            throw new BusinessRuleException("INVALID_PRODUCT_FIELDS",
+                    "PRODUCT debe usar exactamente los campos congelados del contrato 1.0.");
+        }
+        if (!productId.equals(aggregate.path("productId").asText())) {
+            throw new BusinessRuleException("PRODUCT_ID_MISMATCH", "productId debe coincidir con entityId.");
+        }
+        requireStringFields(aggregate);
+        String code = text(aggregate, "code");
+        String name = text(aggregate, "name");
         if (code.isBlank() || name.isBlank()) {
             throw new BusinessRuleException("INVALID_PRODUCT_PAYLOAD", "El producto debe incluir código y nombre.");
         }
@@ -51,17 +66,17 @@ public class ProductProjectionService {
             if (product.getCode() == null) initializeDeleted(product, productId);
         } else {
             JsonNode aggregate = aggregate(payload);
-            product.setCode(text(aggregate, "code", "codigo"));
-            product.setName(text(aggregate, "name", "nombre"));
-            product.setDescription(text(aggregate, "description", "descripcion"));
-            product.setCompany(text(aggregate, "company", "empresa"));
-            product.setCompanyId(text(aggregate, "companyId", "empresaId"));
-            product.setBrand(text(aggregate, "brand", "marca"));
-            product.setBrandId(text(aggregate, "brandId", "marcaId"));
-            product.setCategory(text(aggregate, "category", "categoria"));
-            product.setCategoryId(text(aggregate, "categoryId", "categoriaId"));
-            product.setSubcategory(text(aggregate, "subcategory", "subcategoria"));
-            product.setSubcategoryId(text(aggregate, "subcategoryId", "subcategoriaId"));
+            product.setCode(text(aggregate, "code"));
+            product.setName(text(aggregate, "name"));
+            product.setDescription(text(aggregate, "description"));
+            product.setCompany(text(aggregate, "company"));
+            product.setCompanyId(text(aggregate, "companyId"));
+            product.setBrand(text(aggregate, "brand"));
+            product.setBrandId(text(aggregate, "brandId"));
+            product.setCategory(text(aggregate, "category"));
+            product.setCategoryId(text(aggregate, "categoryId"));
+            product.setSubcategory(text(aggregate, "subcategory"));
+            product.setSubcategoryId(text(aggregate, "subcategoryId"));
             product.setProductType(productType(aggregate));
             product.setStatus(status(aggregate));
             product.setDeletedAt(null);
@@ -77,7 +92,7 @@ public class ProductProjectionService {
         }
         Set<String> skus = new HashSet<>();
         for (JsonNode variant : variants) {
-            String sku = text(variant, "sku", "codigo");
+            String sku = text(variant, "sku");
             if (sku.isBlank() || !skus.add(sku.toUpperCase())) {
                 throw new BusinessRuleException("INVALID_PRODUCT_VARIANT", "Cada variante debe tener un SKU único.");
             }
@@ -91,6 +106,18 @@ public class ProductProjectionService {
         }
         validateReferences(aggregate.get("presentations"), skus, "sku", "La presentación referencia un SKU inexistente.");
         validateReferences(aggregate.get("prices"), skus, "sku", "El precio referencia un SKU inexistente.");
+        validateImageStorageKeys(aggregate.get("images"));
+    }
+
+    private void validateImageStorageKeys(JsonNode images) {
+        for (JsonNode image : images) {
+            String storageKey = image.path("storageKey").asText("").trim().replace('\\', '/');
+            if (storageKey.isBlank() || storageKey.startsWith("/") || storageKey.contains(":")
+                    || storageKey.equals("..") || storageKey.contains("../") || !storageKey.startsWith("files/")) {
+                throw new BusinessRuleException("INVALID_PRODUCT_IMAGE_KEY",
+                        "Cada imagen debe usar un storageKey relativo generado por el backend.");
+            }
+        }
     }
 
     private void validateReferences(JsonNode rows, Set<String> skus, String field, String message) {
@@ -126,8 +153,7 @@ public class ProductProjectionService {
     }
 
     private JsonNode aggregate(JsonNode payload) {
-        JsonNode nested = payload == null ? null : payload.get("product");
-        return nested != null && nested.isObject() ? nested : payload;
+        return payload;
     }
 
     private ProductType productType(JsonNode node) {
@@ -139,23 +165,26 @@ public class ProductProjectionService {
     }
 
     private ProductStatus status(JsonNode node) {
-        String value = text(node, "status", "estado");
-        if (!value.isBlank()) {
-            try {
-                return ProductStatus.valueOf(value.toUpperCase());
-            } catch (IllegalArgumentException ignored) {
-                // Compatibilidad con el campo booleano de la app móvil.
-            }
+        String value = text(node, "status");
+        try {
+            return ProductStatus.valueOf(value.toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessRuleException("INVALID_PRODUCT_STATUS", "Estado de producto no reconocido.");
         }
-        JsonNode active = node.get("active");
-        if (active == null) active = node.get("activo");
-        return active != null && !active.asBoolean(true) ? ProductStatus.INACTIVE : ProductStatus.ACTIVE;
     }
 
-    private String text(JsonNode node, String primary, String legacy) {
+    private void requireStringFields(JsonNode node) {
+        for (String field : Set.of("productId", "code", "name", "description", "company", "companyId", "brand",
+                "brandId", "category", "categoryId", "subcategory", "subcategoryId", "productType", "status")) {
+            if (!node.path(field).isString()) {
+                throw new BusinessRuleException("INVALID_PRODUCT_FIELD_TYPE", field + " debe ser texto.");
+            }
+        }
+    }
+
+    private String text(JsonNode node, String primary) {
         if (node == null) return "";
         JsonNode value = node.get(primary);
-        if (value == null || value.isNull()) value = node.get(legacy);
         return value == null || value.isNull() ? "" : value.asText().trim();
     }
 

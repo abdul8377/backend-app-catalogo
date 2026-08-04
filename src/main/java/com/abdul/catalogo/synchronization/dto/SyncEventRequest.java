@@ -17,7 +17,7 @@ public record SyncEventRequest(
         @NotNull SyncOperation operation,
         @Min(0) long baseVersion,
         @Min(1) int payloadVersion,
-        @Size(max = 30) String schemaVersion,
+        @NotBlank @Size(max = 30) String schemaVersion,
         @Pattern(regexp = "^[a-fA-F0-9]{64}$") String checksum,
         @NotNull Instant occurredAt,
         @NotNull JsonNode payload

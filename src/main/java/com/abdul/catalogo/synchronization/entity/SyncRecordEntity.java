@@ -55,6 +55,9 @@ public class SyncRecordEntity extends AuditedEntity {
     @Column(name = "origin_device_id", length = 36, columnDefinition = "CHAR(36)")
     private String originDeviceId;
 
+    @Column(name = "last_sequence", nullable = false)
+    private long lastSequence;
+
     @Version
     @Column(name = "technical_version", nullable = false)
     private long technicalVersion;

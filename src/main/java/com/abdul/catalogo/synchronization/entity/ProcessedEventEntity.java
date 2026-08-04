@@ -37,6 +37,9 @@ public class ProcessedEventEntity {
     @Column(name = "server_sequence")
     private Long serverSequence;
 
+    @Column(name = "conflict_id", length = 36, columnDefinition = "CHAR(36)")
+    private String conflictId;
+
     @Column(name = "processed_at", nullable = false)
     private Instant processedAt;
 

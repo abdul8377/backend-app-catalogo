@@ -6,6 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record ServerProperties(
         String name,
         boolean mdnsEnabled,
+        String mdnsBindAddress,
         String serviceType,
         int publicPort
 ) {
