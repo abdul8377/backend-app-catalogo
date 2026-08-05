@@ -15,22 +15,54 @@
 </header>
 <main class="container">
     <section class="catalog-hero">
-        <div><p class="eyebrow">Carga masiva controlada</p><h1>Importar productos</h1><p class="hero-copy">La importación crea únicamente productos, variantes, atributos, presentaciones, precios e imágenes. No crea empresas, marcas, categorías, clientes ni pedidos.</p></div>
-        <a class="button primary" th:href="@{/admin/products/import/template}">Descargar plantilla v2</a>
+        <div>
+            <p class="eyebrow">Carga masiva controlada</p>
+            <h1>Importar productos</h1>
+            <p class="hero-copy">La importación crea únicamente productos, variantes, atributos, presentaciones, precios e imágenes. Las empresas, marcas, categorías y relaciones deben existir previamente en MySQL mediante sincronización.</p>
+        </div>
+        <div class="button-row">
+            <a class="button" th:href="@{/admin/products/import/master-data}">Descargar datos maestros</a>
+            <a class="button primary" th:href="@{/admin/products/import/template}">Descargar plantilla v2</a>
+        </div>
     </section>
 
     <div class="notice" th:if="${message}" th:text="${message}"></div>
     <div class="form-error" th:if="${error}" th:text="${error}"></div>
 
+    <section class="wizard-card" th:if="${masterSummary}">
+        <div class="wizard-panel-heading">
+            <div>
+                <p class="eyebrow">Integridad referencial</p>
+                <h2>Datos maestros disponibles</h2>
+                <p>Estos registros son las referencias válidas para las columnas EmpresaId, MarcaId, CategoriaId y SubcategoriaId.</p>
+            </div>
+            <span class="badge" th:text="${masterSummary.readyForProductImport ? 'LISTO PARA IMPORTAR' : 'FALTAN DATOS MAESTROS'}">ESTADO</span>
+        </div>
+        <div class="import-summary">
+            <div class="card summary-item"><span>Empresas</span><strong th:text="${masterSummary.companies}">0</strong></div>
+            <div class="card summary-item"><span>Marcas</span><strong th:text="${masterSummary.brands}">0</strong></div>
+            <div class="card summary-item"><span>Categorías</span><strong th:text="${masterSummary.categories}">0</strong></div>
+            <div class="card summary-item"><span>Relaciones marca–categoría</span><strong th:text="${masterSummary.brandCategoryRelations}">0</strong></div>
+            <div class="card summary-item"><span>Unidades</span><strong th:text="${masterSummary.measurementUnits}">0</strong></div>
+            <div class="card summary-item"><span>Atributos</span><strong th:text="${masterSummary.categoryAttributes}">0</strong></div>
+        </div>
+        <div class="form-error" th:if="${!masterSummary.readyForProductImport}">
+            Sincroniza primero al menos una empresa, una marca, una categoría y su relación marca–categoría. La vista previa rechazará cualquier producto sin referencias reales.
+        </div>
+    </section>
+
     <section class="wizard-summary" style="margin-bottom:18px">
-        <article class="summary-card"><span>Paso 1</span><strong>Completar Excel</strong><small>Una familia puede tener muchas variantes.</small></article>
-        <article class="summary-card"><span>Paso 2</span><strong>Adjuntar imágenes</strong><small>ZIP opcional, enlazado por nombre de archivo.</small></article>
+        <article class="summary-card"><span>Paso 1</span><strong>Preparar maestros</strong><small>Sincroniza empresa, marca, categorías, unidades y atributos.</small></article>
+        <article class="summary-card"><span>Paso 2</span><strong>Completar Excel y ZIP</strong><small>Una familia puede tener muchas variantes e imágenes.</small></article>
         <article class="summary-card"><span>Paso 3</span><strong>Validar y confirmar</strong><small>Nada cambia antes de confirmar.</small></article>
     </section>
 
     <form class="wizard-card" method="post" enctype="multipart/form-data" th:action="@{/admin/products/import/preview}">
         <div class="wizard-panel-heading">
-            <div><h2>Nueva vista previa</h2><p>Solo archivos .xlsx sin macros ni fórmulas. El ZIP puede contener JPG, PNG o WebP.</p></div>
+            <div>
+                <h2>Nueva vista previa</h2>
+                <p>Solo archivos .xlsx sin macros ni fórmulas. Todos los precios se registran en soles (PEN) con IGV predeterminado de 18 %.</p>
+            </div>
         </div>
         <div class="wizard-grid">
             <div class="wizard-field field-span-6">
@@ -41,11 +73,21 @@
             <div class="wizard-field field-span-6">
                 <label for="images">ZIP de imágenes</label>
                 <input id="images" type="file" name="images" accept=".zip,application/zip">
-                <small>El valor de Imagenes.Archivo debe coincidir con la ruta dentro del ZIP.</small>
+                <small>El valor de Imagenes.Archivo debe coincidir exactamente con la ruta dentro del ZIP.</small>
             </div>
         </div>
         <div class="form-actions"><button class="button primary" type="submit">Validar y generar vista previa</button></div>
     </form>
+
+    <article class="wizard-card">
+        <h2>Referencias y reglas de clasificación</h2>
+        <p>Descarga el libro de datos maestros y copia los identificadores reales. El backend comprobará empresa → marca, categoría → subcategoría y la relación marca–categoría antes de permitir la importación.</p>
+        <div class="review-list">
+            <div class="review-item"><strong>Empresa y marca</strong><span>MarcaId debe pertenecer al EmpresaId indicado.</span></div>
+            <div class="review-item"><strong>Categoría</strong><span>SubcategoriaId debe ser hija de CategoriaId.</span></div>
+            <div class="review-item"><strong>Moneda</strong><span>Solo PEN; un precio ausente se marca Por cotizar, nunca como cero.</span></div>
+        </div>
+    </article>
 
     <article class="wizard-card">
         <h2>Cómo se vinculan las imágenes</h2>
