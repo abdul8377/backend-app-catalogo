@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.JsonNode;
@@ -22,10 +23,12 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -41,6 +44,7 @@ class SyncFlowIntegrationTest {
     @Autowired ChangeLogRepository changeRepository;
     @Autowired SyncRecordRepository recordRepository;
     @Autowired ProductRepository productRepository;
+    @Autowired JdbcTemplate jdbcTemplate;
 
     private String deviceId;
     private String token;
@@ -79,6 +83,13 @@ class SyncFlowIntegrationTest {
                 .andExpect(jsonPath("$.results[0].serverVersion").doesNotExist())
                 .andExpect(jsonPath("$.results[0].serverSequence").doesNotExist())
                 .andExpect(jsonPath("$.results[1].status").value("ACCEPTED"));
+
+        assertThat(count("producto_variantes_catalogo", productId)).isEqualTo(1);
+        assertThat(count("producto_familia_ejes", productId)).isEqualTo(1);
+        assertThat(count("producto_atributos", productId)).isEqualTo(1);
+        assertThat(count("producto_presentaciones", productId)).isEqualTo(1);
+        assertThat(count("producto_precios", productId)).isEqualTo(1);
+
         mockMvc.perform(authenticated(post("/api/v1/sync/push")).contentType(MediaType.APPLICATION_JSON)
                         .content(push(productEvent))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.results[0].status").value("ALREADY_PROCESSED"));
@@ -90,6 +101,10 @@ class SyncFlowIntegrationTest {
                 .andExpect(jsonPath("$.results[0].status").value("CONFLICT"))
                 .andExpect(jsonPath("$.results[0].conflictId").isNotEmpty());
 
+        mockMvc.perform(get("/admin/products").with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("product-card-web")))
+                .andExpect(content().string(containsString("Taladro de prueba")));
         mockMvc.perform(get("/admin/products/{id}/edit", productId).with(user("admin").roles("ADMIN")))
                 .andExpect(status().isOk());
         mockMvc.perform(post("/admin/products/{id}", productId).with(user("admin").roles("ADMIN")).with(csrf())
@@ -117,7 +132,8 @@ class SyncFlowIntegrationTest {
         assertThat(webUpdate.path("payload").propertyNames()).containsExactlyInAnyOrder(
                 "productId", "code", "name", "description", "company", "companyId", "brand", "brandId",
                 "category", "categoryId", "subcategory", "subcategoryId", "productType", "status",
-                "attributes", "variants", "presentations", "prices", "images");
+                "attributes", "variants", "presentations", "prices", "images",
+                "familyAxes", "attributeValues", "attributeOptions");
         assertThat(webUpdate.path("payload").path("name").asText()).isEqualTo("Taladro actualizado en PC");
         assertThat(webUpdate.path("payload").path("variants").get(0).path("shortName").asText()).isEqualTo("Taladro PC");
         assertThat(webUpdate.path("payload").path("prices").get(0).path("price").decimalValue())
@@ -168,14 +184,32 @@ class SyncFlowIntegrationTest {
     }
 
     private Map<String, Object> productPayload(String id, String code, String name) {
+        String attributeId = UUID.randomUUID().toString();
         return Map.ofEntries(Map.entry("productId", id), Map.entry("code", code), Map.entry("name", name),
                 Map.entry("description", ""), Map.entry("company", "Empresa Demo"), Map.entry("companyId", "company-demo"),
                 Map.entry("brand", "Marca Demo"), Map.entry("brandId", "brand-demo"),
                 Map.entry("category", "Taladros"), Map.entry("categoryId", "category-demo"),
                 Map.entry("subcategory", ""), Map.entry("subcategoryId", ""),
-                Map.entry("status", "ACTIVE"), Map.entry("productType", "SINGLE"), Map.entry("attributes", Map.of()),
+                Map.entry("status", "ACTIVE"), Map.entry("productType", "SINGLE"),
+                Map.entry("attributes", Map.of("Potencia", "750 W")),
                 Map.entry("variants", List.of(Map.of("sku", code, "shortName", name, "status", "ACTIVE", "attributes", Map.of()))),
-                Map.entry("presentations", List.of()), Map.entry("prices", List.of()), Map.entry("images", List.of()));
+                Map.entry("presentations", List.of(Map.of("sku", code, "name", "Unidad", "equivalence", 1,
+                        "baseUnit", "UND", "minimumSale", 1, "status", "ACTIVE"))),
+                Map.entry("prices", List.of(Map.of("sku", code, "priceList", "General", "presentation", "Unidad",
+                        "currency", "PEN", "taxRate", 18, "price", 149.90, "quoteRequired", false))),
+                Map.entry("images", List.of()),
+                Map.entry("familyAxes", List.of(Map.of("categoria_atributo_id", "power-attribute", "orden", 0))),
+                Map.entry("attributeValues", List.of(Map.of("id", attributeId,
+                        "categoria_atributo_id", "power-attribute", "valor_texto", "750 W"))),
+                Map.entry("attributeOptions", List.of()));
+    }
+
+    private int count(String table, String productId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM " + table + " WHERE producto_id = ?",
+                Integer.class,
+                productId);
+        return count == null ? 0 : count;
     }
 
     private Map<String, Object> event(String id, String type, String entityId, long base, Map<String, Object> payload) {
