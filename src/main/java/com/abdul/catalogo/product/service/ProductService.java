@@ -1,5 +1,6 @@
 package com.abdul.catalogo.product.service;
 
+import com.abdul.catalogo.catalog.service.CatalogMasterDataService;
 import com.abdul.catalogo.product.dto.ProductResponse;
 import com.abdul.catalogo.product.dto.ProductUpsertRequest;
 import com.abdul.catalogo.product.entity.ProductEntity;
@@ -19,7 +20,6 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,13 +28,16 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final ProductProjectionService projectionService;
     private final ServerChangePublisher changePublisher;
+    private final CatalogMasterDataService masterDataService;
     private final ObjectMapper objectMapper;
 
     public ProductService(ProductRepository productRepository, ProductProjectionService projectionService,
-                          ServerChangePublisher changePublisher, ObjectMapper objectMapper) {
+                          ServerChangePublisher changePublisher, CatalogMasterDataService masterDataService,
+                          ObjectMapper objectMapper) {
         this.productRepository = productRepository;
         this.projectionService = projectionService;
         this.changePublisher = changePublisher;
+        this.masterDataService = masterDataService;
         this.objectMapper = objectMapper;
     }
 
@@ -101,12 +104,14 @@ public class ProductService {
         ObjectNode aggregate = readObject(current.getAggregateJson());
         normalizeAggregate(aggregate);
         aggregate.put("status", ProductStatus.DELETED.name());
-        var published = changePublisher.publish("PRODUCT", id, SyncOperation.DELETE, aggregate, origin, current.getVersion());
+        var published = changePublisher.publish(
+                "PRODUCT", id, SyncOperation.DELETE, aggregate, origin, current.getVersion());
         projectionService.apply(id, aggregate, published.version(), origin, true);
     }
 
     private ProductResponse publishCreate(ObjectNode aggregate, String origin) {
         normalizeAggregate(aggregate);
+        masterDataService.canonicalizeRequired(aggregate);
         String id = aggregate.path("productId").asText();
         projectionService.validateUpsert(id, aggregate);
         var published = changePublisher.publish("PRODUCT", id, SyncOperation.UPSERT, aggregate, origin, 0L);
@@ -117,8 +122,10 @@ public class ProductService {
     private ProductResponse publishUpdate(String id, long expectedVersion, ObjectNode aggregate, String origin) {
         requireProduct(id);
         normalizeAggregate(aggregate);
+        masterDataService.canonicalizeRequired(aggregate);
         projectionService.validateUpsert(id, aggregate);
-        var published = changePublisher.publish("PRODUCT", id, SyncOperation.UPSERT, aggregate, origin, expectedVersion);
+        var published = changePublisher.publish(
+                "PRODUCT", id, SyncOperation.UPSERT, aggregate, origin, expectedVersion);
         projectionService.apply(id, aggregate, published.version(), origin, false);
         return toResponse(requireProduct(id));
     }
@@ -133,13 +140,13 @@ public class ProductService {
         node.put("name", request.name().trim());
         node.put("description", safe(request.description()));
         node.put("company", safe(request.company()));
-        node.put("companyId", referenceId("company", request.companyId(), request.company()));
+        node.put("companyId", safe(request.companyId()));
         node.put("brand", safe(request.brand()));
-        node.put("brandId", referenceId("brand", request.brandId(), request.brand()));
+        node.put("brandId", safe(request.brandId()));
         node.put("category", safe(request.category()));
-        node.put("categoryId", referenceId("category", request.categoryId(), request.category()));
+        node.put("categoryId", safe(request.categoryId()));
         node.put("subcategory", safe(request.subcategory()));
-        node.put("subcategoryId", referenceId("subcategory", request.subcategoryId(), request.subcategory()));
+        node.put("subcategoryId", safe(request.subcategoryId()));
         node.put("productType", request.productType().name());
         node.put("status", request.status().name());
         normalizeAggregate(node);
@@ -160,23 +167,23 @@ public class ProductService {
         node.putIfAbsent("imageConfiguration", objectMapper.createObjectNode());
         node.putIfAbsent("productType", objectMapper.getNodeFactory().textNode(ProductType.SINGLE.name()));
         node.putIfAbsent("status", objectMapper.getNodeFactory().textNode(ProductStatus.DRAFT.name()));
-        normalizeReference(node, "company", "companyId");
-        normalizeReference(node, "brand", "brandId");
-        normalizeReference(node, "category", "categoryId");
-        normalizeReference(node, "subcategory", "subcategoryId");
+        ensureText(node, "company");
+        ensureText(node, "companyId");
+        ensureText(node, "brand");
+        ensureText(node, "brandId");
+        ensureText(node, "category");
+        ensureText(node, "categoryId");
+        ensureText(node, "subcategory");
+        ensureText(node, "subcategoryId");
+        masterDataService.canonicalizeIfResolvable(node);
     }
 
-    private void normalizeReference(ObjectNode node, String labelField, String idField) {
-        if (node.path(idField).asText("").isBlank()) {
-            node.put(idField, referenceId(labelField, null, node.path(labelField).asText("")));
+    private void ensureText(ObjectNode node, String field) {
+        if (!node.has(field) || node.get(field).isNull()) {
+            node.put(field, "");
+        } else if (!node.get(field).isTextual()) {
+            node.put(field, node.get(field).asText(""));
         }
-    }
-
-    private String referenceId(String namespace, String provided, String label) {
-        if (provided != null && !provided.isBlank()) return provided.trim();
-        String normalized = safe(label).toLowerCase();
-        if (normalized.isBlank()) return "";
-        return UUID.nameUUIDFromBytes((namespace + ':' + normalized).getBytes(StandardCharsets.UTF_8)).toString();
     }
 
     private ProductEntity requireProduct(String id) {
