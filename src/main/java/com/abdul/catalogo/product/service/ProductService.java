@@ -111,7 +111,7 @@ public class ProductService {
 
     private ProductResponse publishCreate(ObjectNode aggregate, String origin) {
         normalizeAggregate(aggregate);
-        masterDataService.canonicalizeRequired(aggregate);
+        resolveClassificationForSave(aggregate);
         String id = aggregate.path("productId").asText();
         projectionService.validateUpsert(id, aggregate);
         var published = changePublisher.publish("PRODUCT", id, SyncOperation.UPSERT, aggregate, origin, 0L);
@@ -122,12 +122,22 @@ public class ProductService {
     private ProductResponse publishUpdate(String id, long expectedVersion, ObjectNode aggregate, String origin) {
         requireProduct(id);
         normalizeAggregate(aggregate);
-        masterDataService.canonicalizeRequired(aggregate);
+        resolveClassificationForSave(aggregate);
         projectionService.validateUpsert(id, aggregate);
         var published = changePublisher.publish(
                 "PRODUCT", id, SyncOperation.UPSERT, aggregate, origin, expectedVersion);
         projectionService.apply(id, aggregate, published.version(), origin, false);
         return toResponse(requireProduct(id));
+    }
+
+    private void resolveClassificationForSave(ObjectNode aggregate) {
+        ProductStatus status = ProductStatus.valueOf(
+                aggregate.path("status").asText(ProductStatus.DRAFT.name()).toUpperCase());
+        if (status == ProductStatus.ACTIVE) {
+            masterDataService.canonicalizeRequired(aggregate);
+        } else {
+            masterDataService.canonicalizeIfResolvable(aggregate);
+        }
     }
 
     private ObjectNode aggregate(ProductUpsertRequest request, String id, ObjectNode baseAggregate) {
