@@ -60,7 +60,7 @@ public class ProductService {
 
     @Transactional
     public ProductResponse create(ProductUpsertRequest request, String origin) {
-        return publishCreate(aggregate(request, UUID.randomUUID().toString()), origin);
+        return publishCreate(aggregate(request, UUID.randomUUID().toString(), objectMapper.createObjectNode()), origin);
     }
 
     @Transactional
@@ -75,7 +75,8 @@ public class ProductService {
     public ProductResponse update(String id, ProductUpsertRequest request, String origin) {
         ProductEntity current = requireProduct(id);
         long expected = request.version() == null ? current.getVersion() : request.version();
-        return publishUpdate(id, expected, aggregate(request, id), origin);
+        ObjectNode existingAggregate = readObject(current.getAggregateJson());
+        return publishUpdate(id, expected, aggregate(request, id, existingAggregate), origin);
     }
 
     @Transactional
@@ -122,9 +123,11 @@ public class ProductService {
         return toResponse(requireProduct(id));
     }
 
-    private ObjectNode aggregate(ProductUpsertRequest request, String id) {
-        ObjectNode node = request.details() != null && request.details().isObject()
-                ? ((ObjectNode) request.details()).deepCopy() : objectMapper.createObjectNode();
+    private ObjectNode aggregate(ProductUpsertRequest request, String id, ObjectNode baseAggregate) {
+        ObjectNode node = baseAggregate == null ? objectMapper.createObjectNode() : baseAggregate.deepCopy();
+        if (request.details() != null && request.details().isObject()) {
+            request.details().properties().forEach(entry -> node.set(entry.getKey(), entry.getValue().deepCopy()));
+        }
         node.put("productId", id);
         node.put("code", request.code().trim());
         node.put("name", request.name().trim());
