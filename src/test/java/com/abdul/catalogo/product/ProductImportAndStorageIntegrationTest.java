@@ -1,6 +1,8 @@
 package com.abdul.catalogo.product;
 
+import com.abdul.catalogo.catalog.service.CatalogMasterDataService;
 import com.abdul.catalogo.product.importing.model.ProductImportStatus;
+import com.abdul.catalogo.product.importing.service.ProductImportReferenceWorkbookService;
 import com.abdul.catalogo.product.importing.service.ProductImportService;
 import com.abdul.catalogo.product.repository.ProductRepository;
 import com.abdul.catalogo.shared.crypto.Digests;
@@ -18,15 +20,18 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -38,12 +43,27 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @SpringBootTest
 class ProductImportAndStorageIntegrationTest {
     @Autowired ProductImportService importService;
+    @Autowired ProductImportReferenceWorkbookService referenceWorkbookService;
     @Autowired ProductRepository productRepository;
     @Autowired ChangeLogRepository changeRepository;
     @Autowired StoredFileService storedFileService;
     @Autowired StorageService storageService;
     @Autowired StoredFileRepository storedFileRepository;
     @Autowired StoredFileRetentionService storedFileRetentionService;
+    @Autowired CatalogMasterDataService masterDataService;
+    @Autowired ObjectMapper objectMapper;
+
+    @BeforeEach
+    void prepareCatalogMasters() {
+        masterDataService.project("COMPANY", "import-company", objectMapper.valueToTree(Map.of(
+                "name", "Empresa Demo", "ruc", "20600000001", "active", true)), false);
+        masterDataService.project("BRAND", "import-brand", objectMapper.valueToTree(Map.of(
+                "name", "Marca Demo", "companyId", "import-company", "active", true)), false);
+        masterDataService.project("CATEGORY", "import-category-general", objectMapper.valueToTree(Map.of(
+                "name", "General", "description", "Categoría de importación", "active", true)), false);
+        masterDataService.project("BRAND_CATEGORY", "import-brand-category", objectMapper.valueToTree(Map.of(
+                "brandId", "import-brand", "categoryId", "import-category-general", "active", true)), false);
+    }
 
     @Test
     void previewDoesNotPublishAndConfirmationIsIdempotent() throws Exception {
@@ -75,7 +95,9 @@ class ProductImportAndStorageIntegrationTest {
     void excelAndImageZipPublishACompleteActiveProduct() throws Exception {
         String code = "ZIP-" + UUID.randomUUID().toString().substring(0, 8);
         byte[] workbook = populatedTemplate(code, true);
-        byte[] archive = imageZip("productos/" + code + ".webp", "imagen-webp-ficticia".getBytes(StandardCharsets.UTF_8));
+        byte[] archive = imageZip(
+                "productos/" + code + ".webp",
+                "imagen-webp-ficticia".getBytes(StandardCharsets.UTF_8));
         var excel = excel(workbook);
         var images = new MockMultipartFile("images", "imagenes.zip", "application/zip", archive);
         long filesBefore = storedFileRepository.count();
@@ -89,9 +111,46 @@ class ProductImportAndStorageIntegrationTest {
         assertThat(storedFileRepository.count()).isEqualTo(filesBefore + 1);
         var product = productRepository.findByCodeIgnoreCase(code).orElseThrow();
         assertThat(product.getStatus().name()).isEqualTo("ACTIVE");
+        assertThat(product.getCompanyId()).isEqualTo("import-company");
+        assertThat(product.getBrandId()).isEqualTo("import-brand");
+        assertThat(product.getCategoryId()).isEqualTo("import-category-general");
         assertThat(product.getAggregateJson()).contains("files/").contains("\"primary\":true");
         assertThat(storedFileRepository.findAll()).anyMatch(file ->
                 file.getOwnerId().equals(product.getId()) && file.getStatus() == StoredFileStatus.READY);
+    }
+
+    @Test
+    void referenceWorkbookContainsSyncedMasterIds() throws Exception {
+        try (var workbook = WorkbookFactory.create(
+                new ByteArrayInputStream(referenceWorkbookService.generate()))) {
+            assertThat(workbook.getSheet("Resumen")).isNotNull();
+            assertThat(workbook.getSheet("Ref_Empresas")).isNotNull();
+            assertThat(workbook.getSheet("Ref_Marcas")).isNotNull();
+            assertThat(workbook.getSheet("Ref_Categorias")).isNotNull();
+            assertThat(workbook.getSheet("Ref_Empresas").getRow(1).getCell(0).getStringCellValue())
+                    .isEqualTo("import-company");
+        }
+    }
+
+    @Test
+    void nonPenPriceIsRejected() throws Exception {
+        String code = "USD-" + UUID.randomUUID().toString().substring(0, 8);
+        byte[] workbook = populatedTemplate(code, true);
+        try (XSSFWorkbook editable = new XSSFWorkbook(new ByteArrayInputStream(workbook));
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            editable.getSheet("Precios").getRow(1).getCell(4).setCellValue("USD");
+            editable.write(output);
+            byte[] archive = imageZip(
+                    "productos/" + code + ".webp",
+                    "imagen-webp-ficticia".getBytes(StandardCharsets.UTF_8));
+            var preview = importService.preview(
+                    excel(output.toByteArray()),
+                    new MockMultipartFile("images", "imagenes.zip", "application/zip", archive),
+                    "admin");
+            assertThat(preview.errorRows()).isEqualTo(1);
+            assertThat(preview.rows().get(0).messages())
+                    .anyMatch(message -> message.contains("soles") || message.contains("PEN"));
+        }
     }
 
     @Test
@@ -163,8 +222,11 @@ class ProductImportAndStorageIntegrationTest {
             product.createCell(3).setCellValue("Producto importado");
             product.createCell(4).setCellValue("Vista previa segura");
             product.createCell(5).setCellValue("Empresa Demo");
+            product.createCell(6).setCellValue("import-company");
             product.createCell(7).setCellValue("Marca Demo");
+            product.createCell(8).setCellValue("import-brand");
             product.createCell(9).setCellValue("General");
+            product.createCell(10).setCellValue("import-category-general");
             product.createCell(13).setCellValue("SINGLE");
             product.createCell(14).setCellValue(activeWithImage ? "ACTIVE" : "DRAFT");
 
