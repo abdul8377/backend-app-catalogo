@@ -16,15 +16,26 @@ import java.util.Set;
 
 @Service
 public class ProductProjectionService {
-    private static final Set<String> PRODUCT_FIELDS = Set.of(
+    private static final Set<String> REQUIRED_PRODUCT_FIELDS = Set.of(
             "productId", "code", "name", "description", "company", "companyId", "brand", "brandId",
             "category", "categoryId", "subcategory", "subcategoryId", "productType", "status",
             "attributes", "variants", "presentations", "prices", "images");
+
+    private static final Set<String> SUPPORTED_PRODUCT_FIELDS = Set.of(
+            "productId", "code", "name", "description", "company", "companyId", "brand", "brandId",
+            "category", "categoryId", "subcategory", "subcategoryId", "productType", "status",
+            "attributes", "variants", "presentations", "prices", "images",
+            "familyAxes", "attributeValues", "attributeOptions");
+
     private final ProductRepository productRepository;
+    private final ProductRelationalProjectionService relationalProjectionService;
     private final ObjectMapper objectMapper;
 
-    public ProductProjectionService(ProductRepository productRepository, ObjectMapper objectMapper) {
+    public ProductProjectionService(ProductRepository productRepository,
+                                    ProductRelationalProjectionService relationalProjectionService,
+                                    ObjectMapper objectMapper) {
         this.productRepository = productRepository;
+        this.relationalProjectionService = relationalProjectionService;
         this.objectMapper = objectMapper;
     }
 
@@ -33,9 +44,18 @@ public class ProductProjectionService {
         if (aggregate == null || !aggregate.isObject()) {
             throw new BusinessRuleException("INVALID_PRODUCT_AGGREGATE", "PRODUCT debe ser un objeto JSON completo.");
         }
-        if (!Set.copyOf(aggregate.propertyNames()).equals(PRODUCT_FIELDS)) {
+        Set<String> fields = Set.copyOf(aggregate.propertyNames());
+        if (!fields.containsAll(REQUIRED_PRODUCT_FIELDS)) {
+            Set<String> missing = new HashSet<>(REQUIRED_PRODUCT_FIELDS);
+            missing.removeAll(fields);
             throw new BusinessRuleException("INVALID_PRODUCT_FIELDS",
-                    "PRODUCT debe usar exactamente los campos congelados del contrato 1.0.");
+                    "PRODUCT no contiene los bloques requeridos: " + String.join(", ", missing) + ".");
+        }
+        if (!SUPPORTED_PRODUCT_FIELDS.containsAll(fields)) {
+            Set<String> unsupported = new HashSet<>(fields);
+            unsupported.removeAll(SUPPORTED_PRODUCT_FIELDS);
+            throw new BusinessRuleException("INVALID_PRODUCT_FIELDS",
+                    "PRODUCT contiene campos no soportados: " + String.join(", ", unsupported) + ".");
         }
         if (!productId.equals(aggregate.path("productId").asText())) {
             throw new BusinessRuleException("PRODUCT_ID_MISMATCH", "productId debe coincidir con entityId.");
@@ -64,25 +84,29 @@ public class ProductProjectionService {
             product.setStatus(ProductStatus.DELETED);
             product.setDeletedAt(Instant.now());
             if (product.getCode() == null) initializeDeleted(product, productId);
-        } else {
-            JsonNode aggregate = aggregate(payload);
-            product.setCode(text(aggregate, "code"));
-            product.setName(text(aggregate, "name"));
-            product.setDescription(text(aggregate, "description"));
-            product.setCompany(text(aggregate, "company"));
-            product.setCompanyId(text(aggregate, "companyId"));
-            product.setBrand(text(aggregate, "brand"));
-            product.setBrandId(text(aggregate, "brandId"));
-            product.setCategory(text(aggregate, "category"));
-            product.setCategoryId(text(aggregate, "categoryId"));
-            product.setSubcategory(text(aggregate, "subcategory"));
-            product.setSubcategoryId(text(aggregate, "subcategoryId"));
-            product.setProductType(productType(aggregate));
-            product.setStatus(status(aggregate));
-            product.setDeletedAt(null);
-            product.setAggregateJson(write(aggregate));
+            productRepository.saveAndFlush(product);
+            relationalProjectionService.clear(productId);
+            return;
         }
-        productRepository.save(product);
+
+        JsonNode aggregate = aggregate(payload);
+        product.setCode(text(aggregate, "code"));
+        product.setName(text(aggregate, "name"));
+        product.setDescription(text(aggregate, "description"));
+        product.setCompany(text(aggregate, "company"));
+        product.setCompanyId(text(aggregate, "companyId"));
+        product.setBrand(text(aggregate, "brand"));
+        product.setBrandId(text(aggregate, "brandId"));
+        product.setCategory(text(aggregate, "category"));
+        product.setCategoryId(text(aggregate, "categoryId"));
+        product.setSubcategory(text(aggregate, "subcategory"));
+        product.setSubcategoryId(text(aggregate, "subcategoryId"));
+        product.setProductType(productType(aggregate));
+        product.setStatus(status(aggregate));
+        product.setDeletedAt(null);
+        product.setAggregateJson(write(aggregate));
+        productRepository.saveAndFlush(product);
+        relationalProjectionService.replace(productId, aggregate);
     }
 
     private void validateAggregateCollections(JsonNode aggregate) {
@@ -100,6 +124,9 @@ public class ProductProjectionService {
         requireArray(aggregate, "presentations");
         requireArray(aggregate, "prices");
         requireArray(aggregate, "images");
+        requireOptionalArray(aggregate, "familyAxes");
+        requireOptionalArray(aggregate, "attributeValues");
+        requireOptionalArray(aggregate, "attributeOptions");
         JsonNode attributes = aggregate.get("attributes");
         if (attributes == null || !attributes.isObject()) {
             throw new BusinessRuleException("INVALID_PRODUCT_ATTRIBUTES", "attributes debe ser un objeto JSON.");
@@ -132,6 +159,13 @@ public class ProductProjectionService {
     private void requireArray(JsonNode aggregate, String field) {
         JsonNode value = aggregate.get(field);
         if (value == null || !value.isArray()) {
+            throw new BusinessRuleException("INVALID_PRODUCT_AGGREGATE", field + " debe ser un arreglo JSON.");
+        }
+    }
+
+    private void requireOptionalArray(JsonNode aggregate, String field) {
+        JsonNode value = aggregate.get(field);
+        if (value != null && !value.isArray()) {
             throw new BusinessRuleException("INVALID_PRODUCT_AGGREGATE", field + " debe ser un arreglo JSON.");
         }
     }

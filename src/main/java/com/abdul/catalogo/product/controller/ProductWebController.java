@@ -6,8 +6,9 @@ import com.abdul.catalogo.product.model.ProductStatus;
 import com.abdul.catalogo.product.model.ProductType;
 import com.abdul.catalogo.product.service.ProductFormMapper;
 import com.abdul.catalogo.product.service.ProductService;
-import com.abdul.catalogo.shared.exception.BusinessRuleException;
+import com.abdul.catalogo.product.web.ProductCardView;
 import com.abdul.catalogo.product.web.ProductForm;
+import com.abdul.catalogo.shared.exception.BusinessRuleException;
 import jakarta.validation.Valid;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -36,8 +37,14 @@ public class ProductWebController {
     @GetMapping
     public String list(@RequestParam(defaultValue = "") String query,
                        @RequestParam(defaultValue = "0") int page, Model model) {
-        model.addAttribute("products", productService.list(query, page, 50));
+        var products = productService.list(query, page, 24).map(ProductCardView::from);
+        model.addAttribute("products", products);
         model.addAttribute("query", query);
+        model.addAttribute("totalProducts", products.getTotalElements());
+        model.addAttribute("activeProducts", products.getContent().stream()
+                .filter(product -> product.status() == ProductStatus.ACTIVE).count());
+        model.addAttribute("withoutPrice", products.getContent().stream()
+                .filter(product -> !product.priceState().equals("priced")).count());
         return "products/list";
     }
 

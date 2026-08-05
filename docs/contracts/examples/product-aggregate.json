@@ -2,7 +2,7 @@
   "productId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
   "code": "FAM-001",
   "name": "Producto de ejemplo",
-  "description": "",
+  "description": "Producto sincronizado desde SQLite con sus proyecciones completas.",
   "company": "Empresa",
   "companyId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
   "brand": "Marca",
@@ -13,9 +13,12 @@
   "subcategoryId": "ffffffff-ffff-4fff-8fff-ffffffffffff",
   "productType": "SINGLE",
   "status": "ACTIVE",
-  "attributes": {},
+  "attributes": {
+    "Material": "Acero"
+  },
   "variants": [
     {
+      "id": "12121212-1212-4212-8212-121212121212",
       "sku": "SKU-001",
       "supplierCode": "",
       "shortName": "Producto",
@@ -25,6 +28,7 @@
   ],
   "presentations": [
     {
+      "id": "13131313-1313-4313-8313-131313131313",
       "sku": "SKU-001",
       "name": "Unidad",
       "equivalence": 1,
@@ -37,11 +41,14 @@
     {
       "sku": "SKU-001",
       "priceList": "General",
+      "priceListId": "14141414-1414-4414-8414-141414141414",
       "presentation": "Unidad",
+      "presentationId": "13131313-1313-4313-8313-131313131313",
       "currency": "PEN",
       "taxRate": 18,
       "price": 10,
-      "quoteRequired": false
+      "quoteRequired": false,
+      "configuration": "precio_fijo"
     }
   ],
   "images": [
@@ -50,6 +57,30 @@
       "storageKey": "files/99999999-9999-4999-8999-999999999999/content",
       "type": "PRODUCT",
       "primary": true
+    }
+  ],
+  "familyAxes": [
+    {
+      "producto_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "categoria_atributo_id": "15151515-1515-4515-8515-151515151515",
+      "orden": 0
+    }
+  ],
+  "attributeValues": [
+    {
+      "id": "16161616-1616-4616-8616-161616161616",
+      "producto_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "variante_id": null,
+      "categoria_atributo_id": "15151515-1515-4515-8515-151515151515",
+      "valor_texto": "Acero",
+      "valor_normalizado": "acero"
+    }
+  ],
+  "attributeOptions": [
+    {
+      "producto_atributo_id": "16161616-1616-4616-8616-161616161616",
+      "categoria_atributo_id": "15151515-1515-4515-8515-151515151515",
+      "opcion_id": "17171717-1717-4717-8717-171717171717"
     }
   ]
 }

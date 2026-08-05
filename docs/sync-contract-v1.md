@@ -100,7 +100,7 @@ Campos exactos del resultado: `eventId`, `status`, `version`, `sequence`, `confl
 }
 ```
 
-`eventId` es global e inmutable. Repetir el mismo evento devuelve `ALREADY_PROCESSED` con los mismos `version`, `sequence` y `conflictId`. Reutilizarlo con otro contenido o dispositivo devuelve `REJECTED`. `baseVersion` debe coincidir con la versión central; una diferencia genera `CONFLICT` y nunca sobrescribe silenciosamente. Los movimientos e historiales son append-only y no aceptan `DELETE`.
+`eventId` es global e inmutable. Repetir un evento aceptado devuelve `ALREADY_PROCESSED` con los mismos `version`, `sequence` y `conflictId`. Reutilizarlo con otro contenido o dispositivo devuelve `REJECTED`. Un evento previamente rechazado sin modificar datos puede reprocesarse con el mismo contenido después de corregir una validación compatible del servidor. `baseVersion` debe coincidir con la versión central; una diferencia genera `CONFLICT` y nunca sobrescribe silenciosamente. Los movimientos e historiales son append-only y no aceptan `DELETE`.
 
 ## Pull PC → tablet y ACK
 
@@ -154,7 +154,7 @@ Orden exacto de dependencias:
 20. `ORDER_HISTORY`
 21. `ORDER_SHEET_HISTORY`
 
-`PRODUCT_VARIANT`, `PRODUCT_FAMILY_AXIS`, `PRODUCT_ATTRIBUTE` y `PRODUCT_ATTRIBUTE_OPTION` no son tipos sincronizables.
+`PRODUCT_VARIANT`, `PRODUCT_FAMILY_AXIS`, `PRODUCT_ATTRIBUTE` y `PRODUCT_ATTRIBUTE_OPTION` no son tipos sincronizables independientes. Forman parte del agregado `PRODUCT`.
 
 ## Estado e inicialización
 
@@ -174,7 +174,11 @@ La app decide explícitamente la fuente inicial: PC vacía → subir snapshot de
 
 ## Agregado PRODUCT
 
-`PRODUCT` transporta siempre la familia completa con los campos exactos `productId`, `code`, `name`, `description`, `company`, `companyId`, `brand`, `brandId`, `category`, `categoryId`, `subcategory`, `subcategoryId`, `productType`, `status`, `attributes`, `variants`, `presentations`, `prices` e `images`.
+`PRODUCT` transporta siempre la familia completa. Los campos obligatorios son `productId`, `code`, `name`, `description`, `company`, `companyId`, `brand`, `brandId`, `category`, `categoryId`, `subcategory`, `subcategoryId`, `productType`, `status`, `attributes`, `variants`, `presentations`, `prices` e `images`.
+
+El agregado también admite las proyecciones técnicas que SQLite utiliza para no perder información normalizada: `familyAxes`, `attributeValues` y `attributeOptions`. Cuando no existen deben enviarse como arreglos vacíos. El fixture oficial está en `docs/contracts/examples/product-aggregate.json`.
+
+El backend conserva el agregado completo en `products.aggregate_json` y lo proyecta transaccionalmente en `producto_variantes_catalogo`, `producto_familia_ejes`, `producto_atributos`, `producto_atributo_opciones`, `producto_presentaciones`, `producto_precios` y `producto_imagenes`. Esa proyección no cambia la unidad de transporte: un producto continúa versionándose y sincronizándose como un solo agregado.
 
 Las imágenes contienen `storageKey` relativo generado por el backend; nunca una ruta física de Windows. CRUD web, importación Excel y tablet publican mediante el mismo flujo `ProductService → ServerChangePublisher → sync_records → sync_change_log`.
 

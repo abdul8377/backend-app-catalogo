@@ -1,9 +1,165 @@
 <!doctype html>
-<html lang="es" xmlns:th="http://www.thymeleaf.org"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Productos - App Catálogo</title><link rel="stylesheet" th:href="@{/css/admin.css}"><link rel="stylesheet" th:href="@{/css/admin-v2.css}"></head><body>
-<header class="topbar"><div><strong>App Catálogo</strong><span>Servidor local</span></div><nav><a class="active" th:href="@{/admin/products}">Productos</a><a th:href="@{/admin/products/import}">Importar Excel</a><a th:href="@{/admin/devices}">Dispositivos</a><a th:href="@{/api/v1/sync/status}">Sincronización</a></nav></header>
-<main class="container"><section class="page-heading"><div><p class="eyebrow">Administración</p><h1>Productos</h1><p>Los cambios guardados aquí se publican para todas las tablets.</p></div><div class="button-row"><a class="button" th:href="@{/admin/products/import}">Importar Excel</a><a class="button primary" th:href="@{/admin/products/new}">Nuevo producto</a></div></section>
-<div class="notice" th:if="${message}" th:text="${message}"></div><form class="search" method="get" th:action="@{/admin/products}"><input name="query" th:value="${query}" placeholder="Buscar por nombre o código"><button class="button" type="submit">Buscar</button></form>
-<section class="card table-card"><table><thead><tr><th>Código</th><th>Producto</th><th>Clasificación</th><th>Tipo</th><th>Estado</th><th>Versión</th><th></th></tr></thead><tbody>
-<tr th:each="product : ${products.content}"><td class="mono" th:text="${product.code}"></td><td><strong th:text="${product.name}"></strong><small th:text="${product.description}"></small></td><td><span th:text="${product.brand}"></span><small th:text="|${product.category} / ${product.subcategory}|"></small></td><td th:text="${product.productType}"></td><td><span class="badge" th:classappend="${product.status.name().toLowerCase()}" th:text="${product.status}"></span></td><td th:text="${product.version}"></td><td class="actions"><a th:href="@{/admin/products/{id}/edit(id=${product.id})}">Editar</a><form th:if="${product.status.name() != 'INACTIVE' and product.status.name() != 'DELETED'}" method="post" th:action="@{/admin/products/{id}/deactivate(id=${product.id})}"><button type="submit">Desactivar</button></form></td></tr>
-<tr th:if="${products.empty}"><td colspan="7" class="empty">Todavía no hay productos almacenados.</td></tr></tbody></table></section>
-<div class="pagination" th:if="${products.totalPages > 1}"><a th:if="${products.hasPrevious()}" th:href="@{/admin/products(query=${query},page=${products.number - 1})}">Anterior</a><span th:text="|Página ${products.number + 1} de ${products.totalPages}|"></span><a th:if="${products.hasNext()}" th:href="@{/admin/products(query=${query},page=${products.number + 1})}">Siguiente</a></div></main></body></html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Productos · App Catálogo</title>
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+    <link rel="stylesheet" th:href="@{/css/admin-v2.css}">
+</head>
+<body>
+<header class="topbar">
+    <div class="brand-lockup">
+        <span class="brand-mark">AC</span>
+        <div class="brand-copy">
+            <strong>App Catálogo</strong>
+            <span>Administración local</span>
+        </div>
+    </div>
+    <nav>
+        <a class="active" th:href="@{/admin/products}">Productos</a>
+        <a th:href="@{/admin/products/import}">Importar Excel</a>
+        <a th:href="@{/admin/devices}">Dispositivos</a>
+        <a th:href="@{/api/v1/sync/status}">Sincronización</a>
+    </nav>
+</header>
+
+<main class="container catalog-page">
+    <section class="catalog-hero">
+        <div>
+            <p class="eyebrow">Catálogo central</p>
+            <h1>Productos</h1>
+            <p class="hero-copy">Administra familias, variantes, presentaciones, precios e imágenes. Cada cambio queda listo para sincronizar con la tablet.</p>
+        </div>
+        <div class="button-row hero-actions">
+            <a class="button" th:href="@{/admin/products/import}">Importar Excel</a>
+            <a class="button primary" th:href="@{/admin/products/new}">+ Nuevo producto</a>
+        </div>
+    </section>
+
+    <div class="notice" th:if="${message}" th:text="${message}"></div>
+
+    <section class="catalog-stats" aria-label="Resumen del catálogo">
+        <article class="catalog-stat">
+            <span class="stat-label">Productos encontrados</span>
+            <strong th:text="${totalProducts}">0</strong>
+            <small>Familias disponibles en MySQL</small>
+        </article>
+        <article class="catalog-stat">
+            <span class="stat-label">Activos en esta página</span>
+            <strong th:text="${activeProducts}">0</strong>
+            <small>Listos para mostrarse en la tablet</small>
+        </article>
+        <article class="catalog-stat warning">
+            <span class="stat-label">Sin precio o por cotizar</span>
+            <strong th:text="${withoutPrice}">0</strong>
+            <small>Requieren revisión comercial</small>
+        </article>
+    </section>
+
+    <section class="catalog-toolbar">
+        <form class="catalog-search" method="get" th:action="@{/admin/products}">
+            <span class="search-icon" aria-hidden="true">⌕</span>
+            <input name="query" th:value="${query}"
+                   placeholder="Buscar por nombre, código, empresa, marca o categoría"
+                   aria-label="Buscar productos">
+            <button class="button search-button" type="submit">Buscar</button>
+            <a class="clear-search" th:if="${query != null and !query.isBlank()}" th:href="@{/admin/products}">Limpiar</a>
+        </form>
+        <span class="result-count" th:text="|${products.totalElements} resultados|">0 resultados</span>
+    </section>
+
+    <section class="product-grid" th:if="${!products.empty}">
+        <article class="product-card-web" th:each="product : ${products.content}">
+            <div class="product-media">
+                <img th:if="${product.imageUrl != null}"
+                     th:src="${product.imageUrl}"
+                     th:alt="|Imagen de ${product.name}|"
+                     loading="lazy">
+                <div class="product-image-placeholder" th:if="${product.imageUrl == null}">
+                    <span aria-hidden="true">▧</span>
+                    <small>Sin imagen</small>
+                </div>
+                <span class="product-status"
+                      th:classappend="${product.status.name().toLowerCase()}"
+                      th:text="${product.status.name() == 'ACTIVE' ? 'Activo' : (product.status.name() == 'INACTIVE' ? 'Inactivo' : 'Eliminado')}">Activo</span>
+            </div>
+
+            <div class="product-card-body">
+                <div class="product-card-topline">
+                    <span class="product-code" th:text="|SKU / ${product.code}|">SKU</span>
+                    <span class="version-pill" th:text="|v${product.version}|">v1</span>
+                </div>
+
+                <h2 th:text="${product.name}">Producto</h2>
+                <p class="product-classification">
+                    <strong th:text="${product.brand != null and !product.brand.isBlank() ? product.brand : product.company}">Marca</strong>
+                    <span aria-hidden="true">·</span>
+                    <span th:text="${product.categoryPath}">Categoría</span>
+                </p>
+                <p class="product-description"
+                   th:text="${product.description != null and !product.description.isBlank() ? product.description : 'Sin descripción registrada.'}">
+                    Descripción
+                </p>
+
+                <div class="product-metadata-row">
+                    <span class="type-chip" th:classappend="${product.productType.name().toLowerCase()}">
+                        <span class="chip-dot"></span>
+                        <span th:text="${product.productTypeLabel}">Producto único</span>
+                    </span>
+                    <span class="count-chip" th:text="|${product.variantCount} variante${product.variantCount == 1 ? '' : 's'}|">1 variante</span>
+                    <span class="count-chip" th:text="|${product.attributeCount} atributo${product.attributeCount == 1 ? '' : 's'}|">0 atributos</span>
+                </div>
+
+                <div class="card-section" th:if="${!product.presentations.isEmpty()}">
+                    <span class="section-label">Presentaciones</span>
+                    <div class="chip-list">
+                        <span class="presentation-chip" th:each="presentation : ${product.presentations}" th:text="${presentation}">Unidad</span>
+                    </div>
+                </div>
+
+                <div class="card-section" th:if="${!product.attributes.isEmpty()}">
+                    <span class="section-label">Atributos principales</span>
+                    <div class="attribute-list">
+                        <span class="attribute-chip" th:each="attribute : ${product.attributes}" th:text="${attribute}">Atributo</span>
+                    </div>
+                </div>
+
+                <div class="product-card-footer">
+                    <div>
+                        <span class="section-label">Precio</span>
+                        <strong class="product-price" th:classappend="${product.priceState}" th:text="${product.priceLabel}">Sin precio</strong>
+                    </div>
+                    <div class="card-actions">
+                        <a class="button compact" th:href="@{/admin/products/{id}/edit(id=${product.id})}">Ver y editar</a>
+                        <form th:if="${product.status.name() == 'ACTIVE'}" method="post"
+                              th:action="@{/admin/products/{id}/deactivate(id=${product.id})}">
+                            <button class="button compact danger" type="submit">Desactivar</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </article>
+    </section>
+
+    <section class="catalog-empty" th:if="${products.empty}">
+        <div class="empty-illustration" aria-hidden="true">▦</div>
+        <h2>No encontramos productos</h2>
+        <p th:if="${query != null and !query.isBlank()}">Prueba otra búsqueda o limpia el filtro actual.</p>
+        <p th:unless="${query != null and !query.isBlank()}">Sincroniza la tablet, importa un Excel o registra el primer producto desde la PC.</p>
+        <div class="button-row">
+            <a class="button" th:href="@{/admin/products/import}">Importar Excel</a>
+            <a class="button primary" th:href="@{/admin/products/new}">Nuevo producto</a>
+        </div>
+    </section>
+
+    <nav class="pagination modern-pagination" th:if="${products.totalPages > 1}" aria-label="Paginación">
+        <a class="button compact" th:if="${products.hasPrevious()}"
+           th:href="@{/admin/products(query=${query},page=${products.number - 1})}">← Anterior</a>
+        <span th:text="|Página ${products.number + 1} de ${products.totalPages}|">Página 1 de 1</span>
+        <a class="button compact" th:if="${products.hasNext()}"
+           th:href="@{/admin/products(query=${query},page=${products.number + 1})}">Siguiente →</a>
+    </nav>
+</main>
+</body>
+</html>
