@@ -14,7 +14,10 @@
   "productType": "SINGLE",
   "status": "ACTIVE",
   "attributes": {
-    "Material": "Acero"
+    "Material": {
+      "value": "Acero",
+      "unit": ""
+    }
   },
   "variants": [
     {
@@ -34,12 +37,15 @@
       "equivalence": 1,
       "baseUnit": "UND",
       "minimumSale": 1,
+      "purchaseIncrement": 1,
+      "allowsDecimals": false,
       "status": "ACTIVE"
     }
   ],
   "prices": [
     {
       "sku": "SKU-001",
+      "variantId": "12121212-1212-4212-8212-121212121212",
       "priceList": "General",
       "priceListId": "14141414-1414-4414-8414-141414141414",
       "presentation": "Unidad",
@@ -53,8 +59,10 @@
   ],
   "images": [
     {
+      "id": "99999999-9999-4999-8999-999999999999",
       "sku": "",
       "storageKey": "files/99999999-9999-4999-8999-999999999999/content",
+      "url": "/public/files/99999999-9999-4999-8999-999999999999",
       "type": "PRODUCT",
       "primary": true
     }
@@ -82,5 +90,70 @@
       "categoria_atributo_id": "15151515-1515-4515-8515-151515151515",
       "opcion_id": "17171717-1717-4717-8717-171717171717"
     }
-  ]
+  ],
+  "salesConfiguration": {
+    "presentations": [
+      {
+        "id": "13131313-1313-4313-8313-131313131313",
+        "name": "Unidad",
+        "base_unit": "UND",
+        "equivalent_to": 1,
+        "minimum_order": 1,
+        "purchase_increment": 1,
+        "allows_decimals": false,
+        "assigned_variant_ids": [
+          "12121212-1212-4212-8212-121212121212"
+        ],
+        "default_variant_ids": [],
+        "variant_rules": []
+      }
+    ],
+    "uses_logistics_packages": false,
+    "logistics_packages": [],
+    "has_product_content": false,
+    "content_items": []
+  },
+  "pricingConfiguration": {
+    "lists": [
+      {
+        "id": "14141414-1414-4414-8414-141414141414",
+        "name": "General",
+        "currency_code": "PEN",
+        "includes_igv": true,
+        "valid_from": "2026-05-01",
+        "valid_until": null
+      }
+    ],
+    "prices": [
+      {
+        "list_id": "14141414-1414-4414-8414-141414141414",
+        "variant_id": "12121212-1212-4212-8212-121212121212",
+        "presentation_id": "13131313-1313-4313-8313-131313131313",
+        "configuration": "fixed",
+        "fixed_price": 10,
+        "ranges": []
+      }
+    ],
+    "sellable_combinations": [
+      {
+        "variant_id": "12121212-1212-4212-8212-121212121212",
+        "variant_label": "Producto",
+        "presentation_id": "13131313-1313-4313-8313-131313131313",
+        "presentation_label": "Unidad",
+        "base_unit": "UND",
+        "equivalent_to_base_unit": 1,
+        "minimum_order": 1,
+        "purchase_increment": 1
+      }
+    ]
+  },
+  "imageConfiguration": {
+    "remote_images": [
+      {
+        "id": "99999999-9999-4999-8999-999999999999",
+        "storageKey": "files/99999999-9999-4999-8999-999999999999/content",
+        "primary": true
+      }
+    ]
+  }
 }

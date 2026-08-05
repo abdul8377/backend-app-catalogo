@@ -24,6 +24,12 @@ public class ProductImportEntity {
     private String fileHash;
     @Column(name = "storage_key", nullable = false, length = 500)
     private String storageKey;
+    @Column(name = "image_archive_name", length = 255)
+    private String imageArchiveName;
+    @Column(name = "image_archive_hash", length = 64, columnDefinition = "CHAR(64)")
+    private String imageArchiveHash;
+    @Column(name = "image_archive_storage_key", length = 500)
+    private String imageArchiveStorageKey;
     @Column(name = "template_version", nullable = false, length = 20)
     private String templateVersion;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 30)

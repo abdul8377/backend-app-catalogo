@@ -1,0 +1,37 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Permitir Maven Wrapper
+        run: chmod +x mvnw
+      - name: Ejecutar pruebas
+        shell: bash
+        run: |
+          set -o pipefail
+          ./mvnw --batch-mode clean test 2>&1 | tee maven.log
+      - name: Conservar log de Maven
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-maven-log
+          path: maven.log
+          if-no-files-found: warn

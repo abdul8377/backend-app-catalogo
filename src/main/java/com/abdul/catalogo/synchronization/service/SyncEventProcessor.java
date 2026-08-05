@@ -20,7 +20,9 @@ import com.abdul.catalogo.synchronization.repository.SyncRecordRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -66,9 +68,6 @@ public class SyncEventProcessor {
                         "El eventId ya fue usado con un contenido diferente.");
             }
             if (previous.getStatus() == SyncResultStatus.REJECTED) {
-                // Un rechazo de validación no modificó datos del negocio. Se puede
-                // reprocesar de forma segura después de actualizar el contrato o
-                // corregir una validación del servidor, conservando el eventId.
                 eventRepository.delete(previous);
                 eventRepository.flush();
             } else {
@@ -97,11 +96,13 @@ public class SyncEventProcessor {
                 throw new BusinessRuleException("PAYLOAD_CHECKSUM_MISMATCH", "El checksum declarado no corresponde al payload.");
             }
             if (entityType.equals("PRODUCT") && event.operation() == SyncOperation.UPSERT) {
-                productProjectionService.validateUpsert(event.entityId(), event.payload());
+                validateProductBackup(event.entityId(), event.payload());
             }
         } catch (BusinessRuleException exception) {
-            saveProcessed(event, deviceId, requestChecksum, SyncResultStatus.REJECTED, null, null, null, exception.getMessage());
-            return new SyncEventResult(event.eventId(), SyncResultStatus.REJECTED, null, null, null, exception.getMessage());
+            saveProcessed(event, deviceId, requestChecksum, SyncResultStatus.REJECTED,
+                    null, null, null, exception.getMessage());
+            return new SyncEventResult(event.eventId(), SyncResultStatus.REJECTED,
+                    null, null, null, exception.getMessage());
         }
 
         SyncRecordEntity record = recordRepository.findForUpdate(entityType, event.entityId()).orElse(null);
@@ -109,8 +110,10 @@ public class SyncEventProcessor {
         if (event.baseVersion() != currentVersion) {
             String conflictId = createConflict(deviceId, event, entityType, payloadJson, record, currentVersion);
             String message = "La versión del servidor cambió desde la última sincronización.";
-            saveProcessed(event, deviceId, requestChecksum, SyncResultStatus.CONFLICT, currentVersion, null, conflictId, message);
-            return new SyncEventResult(event.eventId(), SyncResultStatus.CONFLICT, currentVersion, null, conflictId, message);
+            saveProcessed(event, deviceId, requestChecksum, SyncResultStatus.CONFLICT,
+                    currentVersion, null, conflictId, message);
+            return new SyncEventResult(event.eventId(), SyncResultStatus.CONFLICT,
+                    currentVersion, null, conflictId, message);
         }
 
         if (record == null) {
@@ -145,12 +148,30 @@ public class SyncEventProcessor {
         record.setLastSequence(change.getSequence());
         recordRepository.save(record);
 
-        saveProcessed(event, deviceId, requestChecksum, SyncResultStatus.ACCEPTED, nextVersion, change.getSequence(), null, null);
-        return new SyncEventResult(event.eventId(), SyncResultStatus.ACCEPTED, nextVersion, change.getSequence(), null, null);
+        saveProcessed(event, deviceId, requestChecksum, SyncResultStatus.ACCEPTED,
+                nextVersion, change.getSequence(), null, null);
+        return new SyncEventResult(event.eventId(), SyncResultStatus.ACCEPTED,
+                nextVersion, change.getSequence(), null, null);
     }
 
-    private String createConflict(String deviceId, SyncEventRequest event, String entityType, String clientPayload,
-                                  SyncRecordEntity record, long currentVersion) {
+    /**
+     * La tablet debe poder respaldar productos creados con versiones anteriores
+     * aunque todavía no tengan imagen o precio. Se valida toda la estructura,
+     * pero las reglas estrictas de publicación se reservan al formulario web y
+     * al importador. El estado original se conserva al persistir el payload.
+     */
+    private void validateProductBackup(String productId, JsonNode payload) {
+        if (!(payload instanceof ObjectNode product)) {
+            productProjectionService.validateUpsert(productId, payload);
+            return;
+        }
+        ObjectNode validationCopy = product.deepCopy();
+        validationCopy.put("status", "DRAFT");
+        productProjectionService.validateUpsert(productId, validationCopy);
+    }
+
+    private String createConflict(String deviceId, SyncEventRequest event, String entityType,
+                                  String clientPayload, SyncRecordEntity record, long currentVersion) {
         SyncConflictEntity conflict = new SyncConflictEntity();
         conflict.setId(UUID.randomUUID().toString());
         conflict.setEntityType(entityType);

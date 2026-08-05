@@ -21,6 +21,7 @@ import tools.jackson.databind.node.ObjectNode;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class ProductImportExecutor {
@@ -28,13 +29,16 @@ public class ProductImportExecutor {
     private final ProductImportRepository importRepository;
     private final ProductImportRowRepository rowRepository;
     private final ProductService productService;
+    private final ProductImportImageService imageService;
     private final ObjectMapper objectMapper;
 
     public ProductImportExecutor(ProductImportRepository importRepository, ProductImportRowRepository rowRepository,
-                                 ProductService productService, ObjectMapper objectMapper) {
+                                 ProductService productService, ProductImportImageService imageService,
+                                 ObjectMapper objectMapper) {
         this.importRepository = importRepository;
         this.rowRepository = rowRepository;
         this.productService = productService;
+        this.imageService = imageService;
         this.objectMapper = objectMapper;
     }
 
@@ -61,12 +65,21 @@ public class ProductImportExecutor {
         ProductImportRowEntity row = rowRepository.findById(rowId)
                 .orElseThrow(() -> new ResourceNotFoundException("IMPORT_ROW_NOT_FOUND", "La fila de importación no existe."));
         if (row.getStatus() == ProductImportRowStatus.IMPORTED) return;
+        ProductImportEntity importItem = importRepository.findById(row.getImportId())
+                .orElseThrow(() -> new ResourceNotFoundException("IMPORT_NOT_FOUND", "La importación no existe."));
         ObjectNode aggregate = readObject(row.getCandidateJson());
+        String productId = row.getAction() == ProductImportAction.CREATE
+                ? aggregate.path("productId").asText(UUID.randomUUID().toString())
+                : row.getProductId();
+        if (productId == null || productId.isBlank()) productId = UUID.randomUUID().toString();
+        aggregate.put("productId", productId);
+        aggregate = imageService.materialize(importItem, productId, aggregate);
+
         ProductResponse result;
         if (row.getAction() == ProductImportAction.CREATE) {
             result = productService.createAggregate(aggregate, IMPORT_ORIGIN);
         } else {
-            result = productService.updateAggregate(row.getProductId(), row.getExpectedVersion(), aggregate, IMPORT_ORIGIN);
+            result = productService.updateAggregate(productId, row.getExpectedVersion(), aggregate, IMPORT_ORIGIN);
         }
         row.setStatus(ProductImportRowStatus.IMPORTED);
         row.setResultProductId(result.id());

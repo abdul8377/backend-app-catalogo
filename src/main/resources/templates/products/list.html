@@ -6,6 +6,7 @@
     <title>Productos · App Catálogo</title>
     <link rel="stylesheet" th:href="@{/css/admin.css}">
     <link rel="stylesheet" th:href="@{/css/admin-v2.css}">
+    <link rel="stylesheet" th:href="@{/css/product-wizard.css}">
 </head>
 <body>
 <header class="topbar">
@@ -72,22 +73,23 @@
     <section class="product-grid" th:if="${!products.empty}">
         <article class="product-card-web" th:each="product : ${products.content}">
             <div class="product-media">
-                <img th:if="${product.imageUrl != null}"
-                     th:src="${product.imageUrl}"
-                     th:alt="|Imagen de ${product.name}|"
-                     loading="lazy">
+                <div class="product-image-frame" th:if="${product.imageUrl != null}">
+                    <img th:src="${product.imageUrl}"
+                         th:alt="|Imagen de ${product.name}|"
+                         loading="lazy">
+                </div>
                 <div class="product-image-placeholder" th:if="${product.imageUrl == null}">
                     <span aria-hidden="true">▧</span>
                     <small>Sin imagen</small>
                 </div>
                 <span class="product-status"
                       th:classappend="${product.status.name().toLowerCase()}"
-                      th:text="${product.status.name() == 'ACTIVE' ? 'Activo' : (product.status.name() == 'INACTIVE' ? 'Inactivo' : 'Eliminado')}">Activo</span>
+                      th:text="${product.status.name() == 'ACTIVE' ? 'Activo' : (product.status.name() == 'DRAFT' ? 'Borrador' : (product.status.name() == 'INACTIVE' ? 'Inactivo' : 'Eliminado'))}">Activo</span>
             </div>
 
             <div class="product-card-body">
                 <div class="product-card-topline">
-                    <span class="product-code" th:text="|SKU / ${product.code}|">SKU</span>
+                    <span class="product-code" th:text="|Código / ${product.code}|">Código</span>
                     <span class="version-pill" th:text="|v${product.version}|">v1</span>
                 </div>
 

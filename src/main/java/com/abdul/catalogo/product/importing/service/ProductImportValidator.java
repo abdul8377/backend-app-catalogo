@@ -18,10 +18,13 @@ import java.util.UUID;
 public class ProductImportValidator {
     private final ProductService productService;
     private final ProductProjectionService projectionService;
+    private final ProductImportImageService imageService;
 
-    public ProductImportValidator(ProductService productService, ProductProjectionService projectionService) {
+    public ProductImportValidator(ProductService productService, ProductProjectionService projectionService,
+                                  ProductImportImageService imageService) {
         this.productService = productService;
         this.projectionService = projectionService;
+        this.imageService = imageService;
     }
 
     public ValidationResult validate(ProductImportCandidate candidate) {
@@ -49,7 +52,7 @@ public class ProductImportValidator {
         aggregate.put("productId", validationId);
         if (candidate.errors().isEmpty()) {
             try {
-                projectionService.validateUpsert(validationId, aggregate);
+                projectionService.validateUpsert(validationId, imageService.previewAggregate(aggregate));
             } catch (BusinessRuleException exception) {
                 messages.add(exception.getMessage());
             }

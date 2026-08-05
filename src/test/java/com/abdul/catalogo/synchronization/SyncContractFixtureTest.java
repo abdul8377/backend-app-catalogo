@@ -44,17 +44,23 @@ class SyncContractFixtureTest {
                 "productId", "code", "name", "description", "company", "companyId", "brand", "brandId",
                 "category", "categoryId", "subcategory", "subcategoryId", "productType", "status",
                 "attributes", "variants", "presentations", "prices", "images",
-                "familyAxes", "attributeValues", "attributeOptions"));
+                "familyAxes", "attributeValues", "attributeOptions",
+                "salesConfiguration", "pricingConfiguration", "imageConfiguration"));
     }
 
     @Test
-    void productFixtureRepresentsTheRelationalSqliteProjection() throws Exception {
+    void productFixtureRepresentsTheCompleteSqliteBackup() throws Exception {
         JsonNode product = read("product-aggregate.json");
         assertThat(product.path("variants").isArray()).isTrue();
         assertThat(product.path("variants").isEmpty()).isFalse();
         assertThat(product.path("familyAxes").isArray()).isTrue();
         assertThat(product.path("attributeValues").isArray()).isTrue();
         assertThat(product.path("attributeOptions").isArray()).isTrue();
+        assertThat(product.path("salesConfiguration").isObject()).isTrue();
+        assertThat(product.path("pricingConfiguration").isObject()).isTrue();
+        assertThat(product.path("imageConfiguration").isObject()).isTrue();
+        assertThat(product.path("salesConfiguration").path("presentations").isArray()).isTrue();
+        assertThat(product.path("pricingConfiguration").path("lists").isArray()).isTrue();
         assertThat(product.path("presentations").get(0).path("name").asText()).isEqualTo("Unidad");
         assertThat(product.path("prices").get(0).path("price").asDouble()).isEqualTo(10d);
     }
