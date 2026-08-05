@@ -14,7 +14,12 @@ import com.abdul.catalogo.shared.crypto.Digests;
 import com.abdul.catalogo.shared.exception.BusinessRuleException;
 import com.abdul.catalogo.shared.exception.ResourceNotFoundException;
 import com.abdul.catalogo.storage.StorageService;
-import org.springframework.core.io.ClassPathResource;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -22,7 +27,10 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -32,13 +40,14 @@ import java.util.UUID;
 
 @Service
 public class ProductImportService {
-    public static final String TEMPLATE_VERSION = "1.0";
+    public static final String TEMPLATE_VERSION = "2.0";
     private static final Set<String> ALLOWED_TYPES = Set.of(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream", "");
 
     private final ProductImportProperties properties;
     private final ProductWorkbookParser parser;
     private final ProductImportValidator validator;
+    private final ProductImportImageService imageService;
     private final ProductImportRepository importRepository;
     private final ProductImportRowRepository rowRepository;
     private final ProductImportExecutor executor;
@@ -47,34 +56,41 @@ public class ProductImportService {
     private final ObjectMapper objectMapper;
 
     public ProductImportService(ProductImportProperties properties, ProductWorkbookParser parser,
-                                ProductImportValidator validator, ProductImportRepository importRepository,
-                                ProductImportRowRepository rowRepository, ProductImportExecutor executor,
-                                ProductImportReportService reportService, StorageService storageService,
-                                ObjectMapper objectMapper) {
-        this.properties = properties; this.parser = parser; this.validator = validator;
+                                ProductImportValidator validator, ProductImportImageService imageService,
+                                ProductImportRepository importRepository, ProductImportRowRepository rowRepository,
+                                ProductImportExecutor executor, ProductImportReportService reportService,
+                                StorageService storageService, ObjectMapper objectMapper) {
+        this.properties = properties; this.parser = parser; this.validator = validator; this.imageService = imageService;
         this.importRepository = importRepository; this.rowRepository = rowRepository; this.executor = executor;
         this.reportService = reportService; this.storageService = storageService; this.objectMapper = objectMapper;
     }
 
-    @Transactional
     public ProductImportPreviewResponse preview(MultipartFile file, String actor) {
+        return preview(file, null, actor);
+    }
+
+    @Transactional
+    public ProductImportPreviewResponse preview(MultipartFile file, MultipartFile imageArchive, String actor) {
         byte[] bytes = validateAndRead(file);
-        String hash = Digests.sha256(bytes);
+        byte[] zipBytes = readOptionalZip(imageArchive);
+        String hash = combinedHash(bytes, zipBytes);
         ProductImportEntity existing = importRepository.findByFileHash(hash).orElse(null);
         if (existing != null) return toResponse(existing);
 
+        Set<String> imageEntries = imageService.inspect(zipBytes);
         String importId = UUID.randomUUID().toString();
         String fileName = safeName(file.getOriginalFilename());
-        String storageKey;
-        try {
-            storageKey = storageService.store("imports/" + importId + "/original.xlsx",
-                    new java.io.ByteArrayInputStream(bytes), bytes.length);
-        } catch (IOException exception) {
-            throw new BusinessRuleException("IMPORT_STORAGE_ERROR", "No se pudo guardar el original de la importación.");
-        }
+        String storageKey = store("imports/" + importId + "/original.xlsx", bytes,
+                "No se pudo guardar el original de la importación.");
 
         ProductImportEntity item = new ProductImportEntity();
         item.setId(importId); item.setFileName(fileName); item.setFileHash(hash); item.setStorageKey(storageKey);
+        if (zipBytes.length > 0) {
+            item.setImageArchiveName(safeName(imageArchive.getOriginalFilename()));
+            item.setImageArchiveHash(Digests.sha256(zipBytes));
+            item.setImageArchiveStorageKey(store("imports/" + importId + "/images.zip", zipBytes,
+                    "No se pudo guardar el ZIP de imágenes."));
+        }
         item.setTemplateVersion(TEMPLATE_VERSION); item.setStatus(ProductImportStatus.PREVIEW_READY);
         item.setCreatedBy(actor); item.setCreatedAt(Instant.now());
 
@@ -82,7 +98,7 @@ public class ProductImportService {
         int valid = 0, warning = 0, error = 0;
         List<ProductImportCandidate> candidates;
         try {
-            candidates = parser.parse(bytes);
+            candidates = parser.parse(bytes, imageEntries);
         } catch (BusinessRuleException exception) {
             ProductImportRowEntity row = new ProductImportRowEntity();
             row.setId(UUID.randomUUID().toString()); row.setImportId(importId); row.setRowNumber(0);
@@ -131,8 +147,55 @@ public class ProductImportService {
     }
 
     public byte[] template() {
-        try { return new ClassPathResource("excel/product-import-v1.xlsx").getInputStream().readAllBytes(); }
-        catch (IOException exception) { throw new IllegalStateException("No se encontró la plantilla Excel versionada.", exception); }
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            CellStyle header = workbook.createCellStyle();
+            header.setFillForegroundColor(IndexedColors.GOLD.getIndex());
+            header.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            var font = workbook.createFont(); font.setBold(true); header.setFont(font);
+
+            sheet(workbook, header, "Fuentes", "Lote", "ArchivoPDF", "Seccion", "PaginaDesde", "PaginaHasta", "Observacion");
+            sheet(workbook, header, "Productos", "CodigoFamilia", "ProductoId", "Version", "Nombre", "Descripcion",
+                    "Empresa", "EmpresaId", "Marca", "MarcaId", "Categoria", "CategoriaId", "Subcategoria",
+                    "SubcategoriaId", "Tipo", "Estado");
+            sheet(workbook, header, "Variantes", "CodigoFamilia", "SKU", "CodigoProveedor", "NombreCorto", "Estado");
+            sheet(workbook, header, "Atributos", "CodigoFamilia", "SKU", "Atributo", "Valor", "Unidad");
+            sheet(workbook, header, "Presentaciones", "CodigoFamilia", "SKU", "Presentacion", "UnidadBase",
+                    "Equivalencia", "VentaMinima", "Incremento", "PermiteDecimales", "Estado");
+            sheet(workbook, header, "Precios", "CodigoFamilia", "SKU", "ListaPrecio", "Presentacion", "Moneda",
+                    "IGV", "Configuracion", "Precio", "Cotizar");
+            sheet(workbook, header, "Imagenes", "CodigoFamilia", "SKU", "Archivo", "Tipo", "Principal");
+            Sheet help = sheet(workbook, header, "Instrucciones", "Tema", "Detalle");
+            addHelp(help, "Alcance", "La plantilla importa únicamente productos y sus componentes. No crea empresas, marcas, categorías, clientes ni pedidos.");
+            addHelp(help, "Identidad", "CodigoFamilia agrupa todas las hojas. Cada SKU debe ser único dentro del producto.");
+            addHelp(help, "Atributos", "SKU vacío = atributo común de la familia. Con SKU = atributo técnico de esa variante.");
+            addHelp(help, "Presentaciones", "SKU vacío aplica a todas las variantes activas; también puede repetir una presentación para SKU concretos.");
+            addHelp(help, "Precios", "Use Configuracion=precio_fijo con Precio, o Cotizar=SI. Un producto activo requiere todas sus combinaciones listas.");
+            addHelp(help, "Imágenes", "Archivo es la ruta relativa exacta dentro del ZIP opcional, por ejemplo pernos/FYB819295.webp.");
+            addHelp(help, "PDF", "Registre en Fuentes el archivo, sección y páginas para comprobar que ningún bloque quedó sin procesar.");
+
+            workbook.setActiveSheet(workbook.getSheetIndex("Productos"));
+            workbook.write(output);
+            return output.toByteArray();
+        } catch (IOException exception) {
+            throw new IllegalStateException("No se pudo generar la plantilla Excel.", exception);
+        }
+    }
+
+    private Sheet sheet(XSSFWorkbook workbook, CellStyle headerStyle, String name, String... headers) {
+        Sheet sheet = workbook.createSheet(name);
+        Row row = sheet.createRow(0);
+        for (int index = 0; index < headers.length; index++) {
+            var cell = row.createCell(index); cell.setCellValue(headers[index]); cell.setCellStyle(headerStyle);
+            sheet.setColumnWidth(index, Math.min(60, Math.max(15, headers[index].length() + 4)) * 256);
+        }
+        sheet.createFreezePane(0, 1);
+        sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, Math.max(0, headers.length - 1)));
+        return sheet;
+    }
+
+    private void addHelp(Sheet sheet, String topic, String detail) {
+        Row row = sheet.createRow(sheet.getLastRowNum() + 1);
+        row.createCell(0).setCellValue(topic); row.createCell(1).setCellValue(detail);
     }
 
     private byte[] validateAndRead(MultipartFile file) {
@@ -144,6 +207,33 @@ public class ProductImportService {
         if (!ALLOWED_TYPES.contains(type)) throw new BusinessRuleException("INVALID_IMPORT_MIME", "El tipo MIME del archivo no está permitido.");
         try { return file.getBytes(); }
         catch (IOException exception) { throw new BusinessRuleException("IMPORT_READ_ERROR", "No se pudo leer el archivo recibido."); }
+    }
+
+    private byte[] readOptionalZip(MultipartFile archive) {
+        if (archive == null || archive.isEmpty()) return new byte[0];
+        String name = safeName(archive.getOriginalFilename());
+        if (!name.toLowerCase().endsWith(".zip")) {
+            throw new BusinessRuleException("INVALID_IMAGE_ARCHIVE_EXTENSION", "Las imágenes masivas deben enviarse en un archivo .zip.");
+        }
+        if (archive.getSize() > 250L * 1024L * 1024L) {
+            throw new BusinessRuleException("IMAGE_ARCHIVE_TOO_LARGE", "El ZIP de imágenes supera 250 MB.");
+        }
+        try { return archive.getBytes(); }
+        catch (IOException exception) { throw new BusinessRuleException("IMAGE_ARCHIVE_READ_ERROR", "No se pudo leer el ZIP de imágenes."); }
+    }
+
+    private String store(String key, byte[] bytes, String message) {
+        try { return storageService.store(key, new ByteArrayInputStream(bytes), bytes.length); }
+        catch (IOException exception) { throw new BusinessRuleException("IMPORT_STORAGE_ERROR", message); }
+    }
+
+    private String combinedHash(byte[] workbook, byte[] zip) {
+        byte[] separator = "::IMAGES::".getBytes(StandardCharsets.UTF_8);
+        byte[] combined = new byte[workbook.length + separator.length + zip.length];
+        System.arraycopy(workbook, 0, combined, 0, workbook.length);
+        System.arraycopy(separator, 0, combined, workbook.length, separator.length);
+        System.arraycopy(zip, 0, combined, workbook.length + separator.length, zip.length);
+        return Digests.sha256(combined);
     }
 
     private ProductImportPreviewResponse toResponse(ProductImportEntity item) {
