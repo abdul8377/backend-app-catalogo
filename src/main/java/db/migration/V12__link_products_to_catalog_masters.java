@@ -6,6 +6,7 @@ import org.flywaydb.core.api.migration.Context;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashSet;
@@ -24,6 +25,11 @@ public class V12__link_products_to_catalog_masters extends BaseJavaMigration {
         ensureColumn(connection, "subcategory", "VARCHAR(160) NOT NULL DEFAULT ''");
         ensureColumn(connection, "subcategory_id", "VARCHAR(160)");
         ensureColumn(connection, "product_type", "VARCHAR(20) NOT NULL DEFAULT 'SINGLE'");
+
+        ensureNullable(connection, "company_id");
+        ensureNullable(connection, "brand_id");
+        ensureNullable(connection, "category_id");
+        ensureNullable(connection, "subcategory_id");
 
         ensureForeignKey(connection, "fk_product_company",
                 "ALTER TABLE products ADD CONSTRAINT fk_product_company "
@@ -51,6 +57,30 @@ public class V12__link_products_to_catalog_masters extends BaseJavaMigration {
         executeIgnoringDuplicate(connection,
                 "ALTER TABLE products ADD COLUMN " + column + " " + definition,
                 "column");
+    }
+
+    private void ensureNullable(Connection connection, String column) throws SQLException {
+        if (isNullable(connection, column)) return;
+        String database = connection.getMetaData().getDatabaseProductName().toLowerCase(Locale.ROOT);
+        String sql = database.contains("h2")
+                ? "ALTER TABLE products ALTER COLUMN " + column + " DROP NOT NULL"
+                : "ALTER TABLE products MODIFY COLUMN " + column + " VARCHAR(160) NULL";
+        try (Statement statement = connection.createStatement()) {
+            statement.execute(sql);
+        }
+    }
+
+    private boolean isNullable(Connection connection, String column) throws SQLException {
+        try (Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery("SELECT * FROM products WHERE 1 = 0")) {
+            ResultSetMetaData metadata = rows.getMetaData();
+            for (int index = 1; index <= metadata.getColumnCount(); index++) {
+                if (metadata.getColumnName(index).equalsIgnoreCase(column)) {
+                    return metadata.isNullable(index) != ResultSetMetaData.columnNoNulls;
+                }
+            }
+        }
+        return false;
     }
 
     private Set<String> columns(Connection connection) throws SQLException {
