@@ -155,8 +155,11 @@ public class ProductService {
         node.putIfAbsent("familyAxes", objectMapper.createArrayNode());
         node.putIfAbsent("attributeValues", objectMapper.createArrayNode());
         node.putIfAbsent("attributeOptions", objectMapper.createArrayNode());
+        node.putIfAbsent("salesConfiguration", objectMapper.createObjectNode());
+        node.putIfAbsent("pricingConfiguration", objectMapper.createObjectNode());
+        node.putIfAbsent("imageConfiguration", objectMapper.createObjectNode());
         node.putIfAbsent("productType", objectMapper.getNodeFactory().textNode(ProductType.SINGLE.name()));
-        node.putIfAbsent("status", objectMapper.getNodeFactory().textNode(ProductStatus.ACTIVE.name()));
+        node.putIfAbsent("status", objectMapper.getNodeFactory().textNode(ProductStatus.DRAFT.name()));
         normalizeReference(node, "company", "companyId");
         normalizeReference(node, "brand", "brandId");
         normalizeReference(node, "category", "categoryId");
