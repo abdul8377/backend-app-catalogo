@@ -142,19 +142,3 @@ CREATE TABLE categoria_atributo_unidades (
     CONSTRAINT uq_atributo_unidad UNIQUE (categoria_atributo_id, unidad_medida_id)
 );
 CREATE INDEX idx_atributo_unidades_atributo ON categoria_atributo_unidades(categoria_atributo_id, estado, orden);
-
-ALTER TABLE products ADD COLUMN company_id VARCHAR(160) NULL;
-ALTER TABLE products ADD COLUMN brand_id VARCHAR(160) NULL;
-ALTER TABLE products ADD COLUMN category_id VARCHAR(160) NULL;
-ALTER TABLE products ADD COLUMN subcategory VARCHAR(160) NOT NULL DEFAULT '';
-ALTER TABLE products ADD COLUMN subcategory_id VARCHAR(160) NULL;
-ALTER TABLE products ADD COLUMN product_type VARCHAR(20) NOT NULL DEFAULT 'SINGLE';
-
-ALTER TABLE products ADD CONSTRAINT fk_product_company FOREIGN KEY (company_id) REFERENCES empresas(id);
-ALTER TABLE products ADD CONSTRAINT fk_product_brand FOREIGN KEY (brand_id) REFERENCES marcas(id);
-ALTER TABLE products ADD CONSTRAINT fk_product_category FOREIGN KEY (category_id) REFERENCES categorias(id);
-ALTER TABLE products ADD CONSTRAINT fk_product_subcategory FOREIGN KEY (subcategory_id) REFERENCES categorias(id);
-
-CREATE INDEX idx_product_company_id ON products(company_id);
-CREATE INDEX idx_product_brand_id ON products(brand_id);
-CREATE INDEX idx_product_category_id ON products(category_id, subcategory_id);
