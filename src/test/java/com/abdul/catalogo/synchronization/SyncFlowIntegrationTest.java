@@ -51,32 +51,47 @@ class SyncFlowIntegrationTest {
 
     @BeforeEach
     void registerDevice() throws Exception {
-        String pairing = mockMvc.perform(post("/admin/pairing-codes").with(user("admin").roles("ADMIN")).with(csrf()))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String pairing = mockMvc.perform(post("/admin/pairing-codes")
+                        .with(user("admin").roles("ADMIN")).with(csrf()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
         String pairingCode = objectMapper.readTree(pairing).get("pairingCode").asText();
-        String response = mockMvc.perform(post("/api/v1/devices/register").contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("name", "Tablet de pruebas", "platform", "android",
-                                "pairingCode", pairingCode, "appVersion", "1.0.0", "apiContractVersion", "1.0"))))
-                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String response = mockMvc.perform(post("/api/v1/devices/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "name", "Tablet de pruebas",
+                                "platform", "android",
+                                "pairingCode", pairingCode,
+                                "appVersion", "1.0.0",
+                                "apiContractVersion", "1.0"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
         JsonNode registration = objectMapper.readTree(response);
-        deviceId = registration.get("deviceId").asText(); token = registration.get("token").asText();
+        deviceId = registration.get("deviceId").asText();
+        token = registration.get("token").asText();
     }
 
     @Test
-    void synchronizesAllEntityTypesIdempotentlyAndPublishesWebProducts() throws Exception {
+    void synchronizesProductsIdempotentlyAndPublishesCompleteWebChanges() throws Exception {
         long initialRecords = recordRepository.count();
         long initialChanges = changeRepository.count();
         long initialProducts = productRepository.count();
         long initialConflicts = conflictRepository.count();
         long initialEvents = eventRepository.count();
-        String companyId = UUID.randomUUID().toString(); String productId = UUID.randomUUID().toString();
-        Map<String, Object> companyEvent = event(UUID.randomUUID().toString(), "COMPANY", companyId, 0,
+        String companyId = UUID.randomUUID().toString();
+        String productId = UUID.randomUUID().toString();
+
+        Map<String, Object> companyEvent = event(
+                UUID.randomUUID().toString(), "COMPANY", companyId, 0,
                 Map.of("syncId", companyId, "name", "Empresa Demo"));
         Map<String, Object> productPayload = productPayload(productId, "TAB-001", "Taladro de prueba");
-        Map<String, Object> productEvent = event(UUID.randomUUID().toString(), "PRODUCT", productId, 0, productPayload);
+        Map<String, Object> productEvent = event(
+                UUID.randomUUID().toString(), "PRODUCT", productId, 0, productPayload);
 
-        mockMvc.perform(authenticated(post("/api/v1/sync/push")).contentType(MediaType.APPLICATION_JSON)
-                        .content(push(companyEvent, productEvent))).andExpect(status().isOk())
+        mockMvc.perform(authenticated(post("/api/v1/sync/push"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(push(companyEvent, productEvent)))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.results[0].status").value("ACCEPTED"))
                 .andExpect(jsonPath("$.results[0].version").value(1))
                 .andExpect(jsonPath("$.results[0].sequence").isNumber())
@@ -90,74 +105,131 @@ class SyncFlowIntegrationTest {
         assertThat(count("producto_presentaciones", productId)).isEqualTo(1);
         assertThat(count("producto_precios", productId)).isEqualTo(1);
 
-        mockMvc.perform(authenticated(post("/api/v1/sync/push")).contentType(MediaType.APPLICATION_JSON)
-                        .content(push(productEvent))).andExpect(status().isOk())
+        mockMvc.perform(authenticated(post("/api/v1/sync/push"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(push(productEvent)))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.results[0].status").value("ALREADY_PROCESSED"));
 
-        Map<String, Object> stale = event(UUID.randomUUID().toString(), "PRODUCT", productId, 0,
+        Map<String, Object> stale = event(
+                UUID.randomUUID().toString(), "PRODUCT", productId, 0,
                 productPayload(productId, "TAB-001", "Edición desconectada"));
-        mockMvc.perform(authenticated(post("/api/v1/sync/push")).contentType(MediaType.APPLICATION_JSON)
-                        .content(push(stale))).andExpect(status().isOk())
+        mockMvc.perform(authenticated(post("/api/v1/sync/push"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(push(stale)))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.results[0].status").value("CONFLICT"))
                 .andExpect(jsonPath("$.results[0].conflictId").isNotEmpty());
 
         mockMvc.perform(get("/admin/products").with(user("admin").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("product-card-web")))
+                .andExpect(content().string(containsString("product-image-frame")))
                 .andExpect(content().string(containsString("Taladro de prueba")));
-        mockMvc.perform(get("/admin/products/{id}/edit", productId).with(user("admin").roles("ADMIN")))
-                .andExpect(status().isOk());
-        mockMvc.perform(post("/admin/products/{id}", productId).with(user("admin").roles("ADMIN")).with(csrf())
-                        .param("code", "TAB-001").param("name", "Taladro actualizado en PC")
-                        .param("description", "Debe llegar completo a la tablet").param("company", "Empresa Demo")
-                        .param("companyId", "company-demo").param("brand", "Marca Demo").param("brandId", "brand-demo")
-                        .param("category", "Taladros").param("categoryId", "category-demo").param("subcategory", "")
-                        .param("subcategoryId", "").param("productType", "SINGLE").param("status", "ACTIVE")
-                        .param("version", "1").param("attributesJson", "{}")
-                        .param("variantsJson", "[{\"sku\":\"TAB-001\",\"shortName\":\"Taladro PC\",\"status\":\"ACTIVE\",\"attributes\":{}}]")
-                        .param("presentationsJson", "[]")
-                        .param("pricesJson", "[{\"sku\":\"TAB-001\",\"priceList\":\"General\",\"currency\":\"PEN\",\"price\":149.90,\"quoteRequired\":false}]")
-                        .param("imagesJson", "[]"))
-                .andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/admin/products"));
+        mockMvc.perform(get("/admin/products/{id}/edit", productId)
+                        .with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("data-product-wizard")));
+
+        mockMvc.perform(post("/admin/products/{id}", productId)
+                        .with(user("admin").roles("ADMIN")).with(csrf())
+                        .param("productId", productId)
+                        .param("code", "TAB-001")
+                        .param("name", "Taladro actualizado en PC")
+                        .param("description", "Debe llegar completo a la tablet")
+                        .param("company", "Empresa Demo")
+                        .param("companyId", "company-demo")
+                        .param("brand", "Marca Demo")
+                        .param("brandId", "brand-demo")
+                        .param("category", "Taladros")
+                        .param("categoryId", "category-demo")
+                        .param("subcategory", "")
+                        .param("subcategoryId", "")
+                        .param("productType", "SINGLE")
+                        .param("status", "DRAFT")
+                        .param("version", "1")
+                        .param("attributesJson", "{}")
+                        .param("variantsJson", "[{\"id\":\"variant-web\",\"sku\":\"TAB-001\",\"shortName\":\"Taladro PC\",\"status\":\"ACTIVE\",\"attributes\":{}}]")
+                        .param("presentationsJson", "[{\"id\":\"presentation-web\",\"sku\":\"TAB-001\",\"name\":\"Unidad\",\"baseUnit\":\"UND\",\"equivalence\":1,\"minimumSale\":1,\"purchaseIncrement\":1,\"status\":\"ACTIVE\"}]")
+                        .param("pricesJson", "[{\"sku\":\"TAB-001\",\"variantId\":\"variant-web\",\"priceList\":\"General\",\"presentation\":\"Unidad\",\"presentationId\":\"presentation-web\",\"currency\":\"PEN\",\"price\":149.90,\"quoteRequired\":false}]")
+                        .param("imagesJson", "[]")
+                        .param("salesConfigurationJson", "{\"presentations\":[],\"uses_logistics_packages\":false,\"logistics_packages\":[],\"has_product_content\":false,\"content_items\":[]}")
+                        .param("pricingConfigurationJson", "{\"lists\":[],\"prices\":[],\"sellable_combinations\":[]}")
+                        .param("imageConfigurationJson", "{\"remote_images\":[]}")
+                        .param("familyAxesJson", "[]")
+                        .param("attributeValuesJson", "[]")
+                        .param("attributeOptionsJson", "[]"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin/products"));
 
         long expectedCursor = initialChanges + 3;
         String pullJson = mockMvc.perform(authenticated(get("/api/v1/sync/pull"))
-                        .param("after", Long.toString(initialChanges)).param("limit", "300"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.nextCursor").value(expectedCursor))
+                        .param("after", Long.toString(initialChanges))
+                        .param("limit", "300"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nextCursor").value(expectedCursor))
                 .andExpect(jsonPath("$.changes.length()").value(3))
                 .andReturn().getResponse().getContentAsString();
         JsonNode webUpdate = objectMapper.readTree(pullJson).path("changes").valueStream()
-                .filter(change -> productId.equals(change.path("entityId").asText()) && change.path("version").asLong() == 2)
+                .filter(change -> productId.equals(change.path("entityId").asText())
+                        && change.path("version").asLong() == 2)
                 .findFirst().orElseThrow();
         assertThat(webUpdate.path("payload").propertyNames()).containsExactlyInAnyOrder(
                 "productId", "code", "name", "description", "company", "companyId", "brand", "brandId",
                 "category", "categoryId", "subcategory", "subcategoryId", "productType", "status",
                 "attributes", "variants", "presentations", "prices", "images",
-                "familyAxes", "attributeValues", "attributeOptions");
-        assertThat(webUpdate.path("payload").path("name").asText()).isEqualTo("Taladro actualizado en PC");
-        assertThat(webUpdate.path("payload").path("variants").get(0).path("shortName").asText()).isEqualTo("Taladro PC");
+                "familyAxes", "attributeValues", "attributeOptions",
+                "salesConfiguration", "pricingConfiguration", "imageConfiguration");
+        assertThat(webUpdate.path("payload").path("name").asText())
+                .isEqualTo("Taladro actualizado en PC");
+        assertThat(webUpdate.path("payload").path("variants").get(0).path("shortName").asText())
+                .isEqualTo("Taladro PC");
         assertThat(webUpdate.path("payload").path("prices").get(0).path("price").decimalValue())
                 .isEqualByComparingTo("149.90");
-        mockMvc.perform(authenticated(post("/api/v1/sync/pull/ack")).contentType(MediaType.APPLICATION_JSON)
+        assertThat(webUpdate.path("payload").path("salesConfiguration").isObject()).isTrue();
+
+        mockMvc.perform(authenticated(post("/api/v1/sync/pull/ack"))
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"cursor\":" + expectedCursor + "}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.acknowledgedCursor").value(expectedCursor));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.acknowledgedCursor").value(expectedCursor));
         mockMvc.perform(authenticated(get("/api/v1/sync/pull"))
-                        .param("after", Long.toString(expectedCursor)).param("limit", "300"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.changes.length()").value(0))
+                        .param("after", Long.toString(expectedCursor))
+                        .param("limit", "300"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changes.length()").value(0))
                 .andExpect(jsonPath("$.nextCursor").value(expectedCursor));
 
-        mockMvc.perform(get("/admin/products/new").with(user("admin").roles("ADMIN"))).andExpect(status().isOk());
-        mockMvc.perform(post("/admin/products").with(user("admin").roles("ADMIN")).with(csrf())
-                        .param("code", "WEB-" + UUID.randomUUID().toString().substring(0, 8)).param("name", "Producto creado en PC")
-                        .param("description", "Debe llegar a la tablet").param("company", "Empresa Demo")
-                        .param("brand", "Marca Demo").param("category", "General").param("subcategory", "")
-                        .param("productType", "SINGLE").param("status", "ACTIVE").param("version", "0")
-                        .param("attributesJson", "{}").param("variantsJson", "[{\"sku\":\"WEB-SKU\",\"attributes\":{}}]")
-                        .param("presentationsJson", "[]").param("pricesJson", "[]").param("imagesJson", "[]"))
-                .andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/admin/products"));
+        String webProductId = UUID.randomUUID().toString();
+        String webCode = "WEB-" + UUID.randomUUID().toString().substring(0, 8);
+        mockMvc.perform(get("/admin/products/new").with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("data-product-wizard")));
+        mockMvc.perform(post("/admin/products")
+                        .with(user("admin").roles("ADMIN")).with(csrf())
+                        .param("productId", webProductId)
+                        .param("code", webCode)
+                        .param("name", "Producto creado en PC")
+                        .param("description", "Debe llegar a la tablet")
+                        .param("company", "Empresa Demo")
+                        .param("brand", "Marca Demo")
+                        .param("category", "General")
+                        .param("subcategory", "")
+                        .param("productType", "SINGLE")
+                        .param("status", "DRAFT")
+                        .param("version", "0")
+                        .param("attributesJson", "{}")
+                        .param("variantsJson", "[{\"id\":\"variant-new\",\"sku\":\"WEB-SKU\",\"shortName\":\"Producto web\",\"status\":\"ACTIVE\",\"attributes\":{}}]")
+                        .param("presentationsJson", "[{\"id\":\"presentation-new\",\"sku\":\"WEB-SKU\",\"name\":\"Unidad\",\"baseUnit\":\"UND\",\"equivalence\":1,\"minimumSale\":1,\"purchaseIncrement\":1,\"status\":\"ACTIVE\"}]")
+                        .param("pricesJson", "[]")
+                        .param("imagesJson", "[]"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin/products"));
 
-        mockMvc.perform(authenticated(get("/api/v1/sync/bootstrap")).param("page", "0").param("limit", "300"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.snapshotCursor").isNumber());
+        mockMvc.perform(authenticated(get("/api/v1/sync/bootstrap"))
+                        .param("page", "0").param("limit", "300"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.snapshotCursor").isNumber());
         assertThat(recordRepository.count()).isEqualTo(initialRecords + 3);
         assertThat(changeRepository.count()).isEqualTo(initialChanges + 4);
         assertThat(productRepository.count()).isEqualTo(initialProducts + 2);
@@ -185,23 +257,51 @@ class SyncFlowIntegrationTest {
 
     private Map<String, Object> productPayload(String id, String code, String name) {
         String attributeId = UUID.randomUUID().toString();
-        return Map.ofEntries(Map.entry("productId", id), Map.entry("code", code), Map.entry("name", name),
-                Map.entry("description", ""), Map.entry("company", "Empresa Demo"), Map.entry("companyId", "company-demo"),
-                Map.entry("brand", "Marca Demo"), Map.entry("brandId", "brand-demo"),
-                Map.entry("category", "Taladros"), Map.entry("categoryId", "category-demo"),
-                Map.entry("subcategory", ""), Map.entry("subcategoryId", ""),
-                Map.entry("status", "ACTIVE"), Map.entry("productType", "SINGLE"),
-                Map.entry("attributes", Map.of("Potencia", "750 W")),
-                Map.entry("variants", List.of(Map.of("sku", code, "shortName", name, "status", "ACTIVE", "attributes", Map.of()))),
-                Map.entry("presentations", List.of(Map.of("sku", code, "name", "Unidad", "equivalence", 1,
-                        "baseUnit", "UND", "minimumSale", 1, "status", "ACTIVE"))),
-                Map.entry("prices", List.of(Map.of("sku", code, "priceList", "General", "presentation", "Unidad",
-                        "currency", "PEN", "taxRate", 18, "price", 149.90, "quoteRequired", false))),
+        return Map.ofEntries(
+                Map.entry("productId", id),
+                Map.entry("code", code),
+                Map.entry("name", name),
+                Map.entry("description", ""),
+                Map.entry("company", "Empresa Demo"),
+                Map.entry("companyId", "company-demo"),
+                Map.entry("brand", "Marca Demo"),
+                Map.entry("brandId", "brand-demo"),
+                Map.entry("category", "Taladros"),
+                Map.entry("categoryId", "category-demo"),
+                Map.entry("subcategory", ""),
+                Map.entry("subcategoryId", ""),
+                Map.entry("status", "ACTIVE"),
+                Map.entry("productType", "SINGLE"),
+                Map.entry("attributes", Map.of("Potencia", Map.of("value", "750", "unit", "W"))),
+                Map.entry("variants", List.of(Map.of(
+                        "id", "variant-device", "sku", code, "shortName", name,
+                        "status", "ACTIVE", "attributes", Map.of()))),
+                Map.entry("presentations", List.of(Map.of(
+                        "id", "presentation-device", "sku", code, "name", "Unidad",
+                        "equivalence", 1, "baseUnit", "UND", "minimumSale", 1,
+                        "purchaseIncrement", 1, "status", "ACTIVE"))),
+                Map.entry("prices", List.of(Map.of(
+                        "sku", code, "variantId", "variant-device", "priceList", "General",
+                        "presentation", "Unidad", "presentationId", "presentation-device",
+                        "currency", "PEN", "taxRate", 18, "price", 149.90,
+                        "quoteRequired", false))),
                 Map.entry("images", List.of()),
-                Map.entry("familyAxes", List.of(Map.of("categoria_atributo_id", "power-attribute", "orden", 0))),
-                Map.entry("attributeValues", List.of(Map.of("id", attributeId,
-                        "categoria_atributo_id", "power-attribute", "valor_texto", "750 W"))),
-                Map.entry("attributeOptions", List.of()));
+                Map.entry("familyAxes", List.of(Map.of(
+                        "categoria_atributo_id", "power-attribute", "orden", 0))),
+                Map.entry("attributeValues", List.of(Map.of(
+                        "id", attributeId,
+                        "categoria_atributo_id", "power-attribute",
+                        "valor_texto", "750 W"))),
+                Map.entry("attributeOptions", List.of()),
+                Map.entry("salesConfiguration", Map.of(
+                        "presentations", List.of(),
+                        "uses_logistics_packages", false,
+                        "logistics_packages", List.of(),
+                        "has_product_content", false,
+                        "content_items", List.of())),
+                Map.entry("pricingConfiguration", Map.of(
+                        "lists", List.of(), "prices", List.of(), "sellable_combinations", List.of())),
+                Map.entry("imageConfiguration", Map.of("remote_images", List.of())));
     }
 
     private int count(String table, String productId) {
@@ -212,15 +312,26 @@ class SyncFlowIntegrationTest {
         return count == null ? 0 : count;
     }
 
-    private Map<String, Object> event(String id, String type, String entityId, long base, Map<String, Object> payload) {
-        return Map.ofEntries(Map.entry("eventId", id), Map.entry("entityType", type), Map.entry("entityId", entityId),
-                Map.entry("operation", "UPSERT"), Map.entry("baseVersion", base), Map.entry("payloadVersion", 1),
-                Map.entry("schemaVersion", "1.0"), Map.entry("occurredAt", Instant.now().toString()), Map.entry("payload", payload));
+    private Map<String, Object> event(String id, String type, String entityId,
+                                      long base, Map<String, Object> payload) {
+        return Map.ofEntries(
+                Map.entry("eventId", id),
+                Map.entry("entityType", type),
+                Map.entry("entityId", entityId),
+                Map.entry("operation", "UPSERT"),
+                Map.entry("baseVersion", base),
+                Map.entry("payloadVersion", 1),
+                Map.entry("schemaVersion", "1.0"),
+                Map.entry("occurredAt", Instant.now().toString()),
+                Map.entry("payload", payload));
     }
 
     @SafeVarargs
     private final String push(Map<String, Object>... events) throws Exception {
-        return objectMapper.writeValueAsString(Map.of("deviceId", deviceId, "apiContractVersion", "1.0", "events", List.of(events)));
+        return objectMapper.writeValueAsString(Map.of(
+                "deviceId", deviceId,
+                "apiContractVersion", "1.0",
+                "events", List.of(events)));
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder authenticated(
