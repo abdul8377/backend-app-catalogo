@@ -50,17 +50,17 @@ public class ProductEntity extends AuditedEntity {
     @Column(nullable = false, length = 160)
     private String category = "";
 
-    @Column(name = "company_id", nullable = false, length = 160)
-    private String companyId = "";
+    @Column(name = "company_id", length = 160)
+    private String companyId;
 
-    @Column(name = "brand_id", nullable = false, length = 160)
-    private String brandId = "";
+    @Column(name = "brand_id", length = 160)
+    private String brandId;
 
-    @Column(name = "category_id", nullable = false, length = 160)
-    private String categoryId = "";
+    @Column(name = "category_id", length = 160)
+    private String categoryId;
 
-    @Column(name = "subcategory_id", nullable = false, length = 160)
-    private String subcategoryId = "";
+    @Column(name = "subcategory_id", length = 160)
+    private String subcategoryId;
 
     @Column(nullable = false, length = 160)
     private String subcategory = "";
