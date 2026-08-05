@@ -1,5 +1,6 @@
 package com.abdul.catalogo.product.service;
 
+import com.abdul.catalogo.catalog.service.CatalogMasterDataService;
 import com.abdul.catalogo.product.entity.ProductEntity;
 import com.abdul.catalogo.product.model.ProductStatus;
 import com.abdul.catalogo.product.model.ProductType;
@@ -34,13 +35,16 @@ public class ProductProjectionService {
 
     private final ProductRepository productRepository;
     private final ProductRelationalProjectionService relationalProjectionService;
+    private final CatalogMasterDataService masterDataService;
     private final ObjectMapper objectMapper;
 
     public ProductProjectionService(ProductRepository productRepository,
                                     ProductRelationalProjectionService relationalProjectionService,
+                                    CatalogMasterDataService masterDataService,
                                     ObjectMapper objectMapper) {
         this.productRepository = productRepository;
         this.relationalProjectionService = relationalProjectionService;
+        this.masterDataService = masterDataService;
         this.objectMapper = objectMapper;
     }
 
@@ -86,17 +90,30 @@ public class ProductProjectionService {
         }
 
         JsonNode aggregate = aggregate(payload);
+        var classification = masterDataService.resolveOptional(aggregate);
         product.setCode(text(aggregate, "code"));
         product.setName(text(aggregate, "name"));
         product.setDescription(text(aggregate, "description"));
-        product.setCompany(text(aggregate, "company"));
-        product.setCompanyId(text(aggregate, "companyId"));
-        product.setBrand(text(aggregate, "brand"));
-        product.setBrandId(text(aggregate, "brandId"));
-        product.setCategory(text(aggregate, "category"));
-        product.setCategoryId(text(aggregate, "categoryId"));
-        product.setSubcategory(text(aggregate, "subcategory"));
-        product.setSubcategoryId(text(aggregate, "subcategoryId"));
+        if (classification.isPresent()) {
+            var resolved = classification.get();
+            product.setCompany(resolved.company());
+            product.setCompanyId(resolved.companyId());
+            product.setBrand(resolved.brand());
+            product.setBrandId(resolved.brandId());
+            product.setCategory(resolved.category());
+            product.setCategoryId(resolved.categoryId());
+            product.setSubcategory(resolved.subcategory());
+            product.setSubcategoryId(resolved.subcategoryId().isBlank() ? null : resolved.subcategoryId());
+        } else {
+            product.setCompany(text(aggregate, "company"));
+            product.setCompanyId(null);
+            product.setBrand(text(aggregate, "brand"));
+            product.setBrandId(null);
+            product.setCategory(text(aggregate, "category"));
+            product.setCategoryId(null);
+            product.setSubcategory(text(aggregate, "subcategory"));
+            product.setSubcategoryId(null);
+        }
         product.setProductType(productType(aggregate));
         product.setStatus(status(aggregate));
         product.setDeletedAt(null);
@@ -147,7 +164,8 @@ public class ProductProjectionService {
         requireOptionalObject(aggregate, "imageConfiguration");
 
         VariantSummary variantSummary = validateVariants(aggregate.path("variants"), productType(aggregate));
-        PresentationSummary presentationSummary = validatePresentations(aggregate.path("presentations"), variantSummary.activeSkus());
+        PresentationSummary presentationSummary = validatePresentations(
+                aggregate.path("presentations"), variantSummary.activeSkus());
         validatePrices(aggregate.path("prices"), variantSummary.allSkus(), presentationSummary);
         validateImages(aggregate.path("images"));
 
@@ -181,7 +199,8 @@ public class ProductProjectionService {
                         "La variante " + sku + " necesita un nombre corto.");
             }
             String variantStatus = firstText(variant, "status", "estado").toUpperCase(Locale.ROOT);
-            if (variantStatus.isBlank() || variantStatus.equals("ACTIVE") || variantStatus.equals("1") || variantStatus.equals("TRUE")) {
+            if (variantStatus.isBlank() || variantStatus.equals("ACTIVE")
+                    || variantStatus.equals("1") || variantStatus.equals("TRUE")) {
                 active.add(sku);
             }
             JsonNode variantAttributes = variant.get("attributes");
@@ -265,6 +284,11 @@ public class ProductProjectionService {
                 throw new BusinessRuleException("PRICE_PRESENTATION_NOT_FOUND",
                         "El precio referencia una presentación que no corresponde al SKU " + sku + ".");
             }
+            String currency = firstText(price, "currency", "moneda");
+            if (!currency.isBlank() && !currency.equalsIgnoreCase("PEN")) {
+                throw new BusinessRuleException("INVALID_PRODUCT_CURRENCY",
+                        "Todos los precios del catálogo deben registrarse en soles (PEN).");
+            }
             String list = firstText(price, "priceList", "lista_precio_nombre");
             if (list.isBlank()) list = "General";
             String key = normalize(list) + "::" + sku + "::" + normalize(presentation);
@@ -316,7 +340,8 @@ public class ProductProjectionService {
         for (JsonNode price : prices) {
             String rowSku = text(price, "sku").toUpperCase(Locale.ROOT);
             String rowPresentation = firstText(price, "presentation", "presentacion");
-            if ((!rowSku.isBlank() && !rowSku.equals(sku)) || !normalize(rowPresentation).equals(normalize(presentation))) {
+            if ((!rowSku.isBlank() && !rowSku.equals(sku))
+                    || !normalize(rowPresentation).equals(normalize(presentation))) {
                 continue;
             }
             if (booleanValue(price, "quoteRequired", "requiere_cotizacion")) return true;
@@ -329,7 +354,9 @@ public class ProductProjectionService {
     }
 
     private boolean hasPrimaryImage(JsonNode images) {
-        for (JsonNode image : images) if (booleanValue(image, "primary", "principal", "isPrimary")) return true;
+        for (JsonNode image : images) {
+            if (booleanValue(image, "primary", "principal", "isPrimary")) return true;
+        }
         return false;
     }
 
@@ -365,13 +392,13 @@ public class ProductProjectionService {
         product.setName("Producto eliminado");
         product.setDescription("");
         product.setCompany("");
-        product.setCompanyId("");
+        product.setCompanyId(null);
         product.setBrand("");
-        product.setBrandId("");
+        product.setBrandId(null);
         product.setCategory("");
-        product.setCategoryId("");
+        product.setCategoryId(null);
         product.setSubcategory("");
-        product.setSubcategoryId("");
+        product.setSubcategoryId(null);
         product.setProductType(ProductType.SINGLE);
         product.setAggregateJson("{}");
     }
@@ -439,7 +466,8 @@ public class ProductProjectionService {
             if (value == null || value.isNull()) continue;
             if (value.isBoolean()) return value.asBoolean();
             String raw = value.asText().trim();
-            if (raw.equalsIgnoreCase("true") || raw.equals("1") || raw.equalsIgnoreCase("si") || raw.equalsIgnoreCase("sí")) return true;
+            if (raw.equalsIgnoreCase("true") || raw.equals("1")
+                    || raw.equalsIgnoreCase("si") || raw.equalsIgnoreCase("sí")) return true;
         }
         return false;
     }
@@ -456,15 +484,18 @@ public class ProductProjectionService {
         }
     }
 
-    private record VariantSummary(Set<String> allSkus, Set<String> activeSkus) {}
+    private record VariantSummary(Set<String> allSkus, Set<String> activeSkus) {
+    }
 
     private record PresentationSummary(Set<String> familyNames, Map<String, Set<String>> namesBySku) {
         boolean appliesTo(String sku, String name) {
             String normalized = name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
             if (sku == null || sku.isBlank()) {
-                return familyNames.contains(normalized) || namesBySku.values().stream().anyMatch(values -> values.contains(normalized));
+                return familyNames.contains(normalized)
+                        || namesBySku.values().stream().anyMatch(values -> values.contains(normalized));
             }
-            return familyNames.contains(normalized) || namesBySku.getOrDefault(sku.toUpperCase(Locale.ROOT), Set.of()).contains(normalized);
+            return familyNames.contains(normalized)
+                    || namesBySku.getOrDefault(sku.toUpperCase(Locale.ROOT), Set.of()).contains(normalized);
         }
 
         Set<String> namesFor(String sku) {
