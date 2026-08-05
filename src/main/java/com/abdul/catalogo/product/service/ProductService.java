@@ -6,7 +6,6 @@ import com.abdul.catalogo.product.entity.ProductEntity;
 import com.abdul.catalogo.product.model.ProductStatus;
 import com.abdul.catalogo.product.model.ProductType;
 import com.abdul.catalogo.product.repository.ProductRepository;
-import com.abdul.catalogo.shared.exception.BusinessRuleException;
 import com.abdul.catalogo.shared.exception.ResourceNotFoundException;
 import com.abdul.catalogo.synchronization.model.SyncOperation;
 import com.abdul.catalogo.synchronization.service.ServerChangePublisher;
@@ -45,7 +44,7 @@ public class ProductService {
                 Sort.by(Sort.Direction.ASC, "name"));
         Page<ProductEntity> products = query == null || query.isBlank()
                 ? productRepository.findAll(pageable)
-                : productRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase(query.trim(), query.trim(), pageable);
+                : productRepository.search(query.trim(), pageable);
         return products.map(this::toResponse);
     }
 
@@ -90,6 +89,7 @@ public class ProductService {
     public ProductResponse deactivate(String id, String origin) {
         ProductEntity current = requireProduct(id);
         ObjectNode aggregate = readObject(current.getAggregateJson());
+        normalizeAggregate(aggregate);
         aggregate.put("status", ProductStatus.INACTIVE.name());
         return publishUpdate(id, current.getVersion(), aggregate, origin);
     }
@@ -98,12 +98,14 @@ public class ProductService {
     public void delete(String id, String origin) {
         ProductEntity current = requireProduct(id);
         ObjectNode aggregate = readObject(current.getAggregateJson());
+        normalizeAggregate(aggregate);
         aggregate.put("status", ProductStatus.DELETED.name());
         var published = changePublisher.publish("PRODUCT", id, SyncOperation.DELETE, aggregate, origin, current.getVersion());
         projectionService.apply(id, aggregate, published.version(), origin, true);
     }
 
     private ProductResponse publishCreate(ObjectNode aggregate, String origin) {
+        normalizeAggregate(aggregate);
         String id = aggregate.path("productId").asText();
         projectionService.validateUpsert(id, aggregate);
         var published = changePublisher.publish("PRODUCT", id, SyncOperation.UPSERT, aggregate, origin, 0L);
@@ -113,6 +115,7 @@ public class ProductService {
 
     private ProductResponse publishUpdate(String id, long expectedVersion, ObjectNode aggregate, String origin) {
         requireProduct(id);
+        normalizeAggregate(aggregate);
         projectionService.validateUpsert(id, aggregate);
         var published = changePublisher.publish("PRODUCT", id, SyncOperation.UPSERT, aggregate, origin, expectedVersion);
         projectionService.apply(id, aggregate, published.version(), origin, false);
@@ -146,6 +149,9 @@ public class ProductService {
         node.putIfAbsent("presentations", objectMapper.createArrayNode());
         node.putIfAbsent("prices", objectMapper.createArrayNode());
         node.putIfAbsent("images", objectMapper.createArrayNode());
+        node.putIfAbsent("familyAxes", objectMapper.createArrayNode());
+        node.putIfAbsent("attributeValues", objectMapper.createArrayNode());
+        node.putIfAbsent("attributeOptions", objectMapper.createArrayNode());
         node.putIfAbsent("productType", objectMapper.getNodeFactory().textNode(ProductType.SINGLE.name()));
         node.putIfAbsent("status", objectMapper.getNodeFactory().textNode(ProductStatus.ACTIVE.name()));
         normalizeReference(node, "company", "companyId");
