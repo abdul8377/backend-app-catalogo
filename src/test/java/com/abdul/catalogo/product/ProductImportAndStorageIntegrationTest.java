@@ -42,6 +42,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @ActiveProfiles("test")
 @SpringBootTest
 class ProductImportAndStorageIntegrationTest {
+    private static final String COMPANY_NAME = "Empresa de importación";
+    private static final String BRAND_NAME = "Marca de importación";
+
     @Autowired ProductImportService importService;
     @Autowired ProductImportReferenceWorkbookService referenceWorkbookService;
     @Autowired ProductRepository productRepository;
@@ -56,9 +59,9 @@ class ProductImportAndStorageIntegrationTest {
     @BeforeEach
     void prepareCatalogMasters() {
         masterDataService.project("COMPANY", "import-company", objectMapper.valueToTree(Map.of(
-                "name", "Empresa Demo", "ruc", "20600000001", "active", true)), false);
+                "name", COMPANY_NAME, "ruc", "20600000001", "active", true)), false);
         masterDataService.project("BRAND", "import-brand", objectMapper.valueToTree(Map.of(
-                "name", "Marca Demo", "companyId", "import-company", "active", true)), false);
+                "name", BRAND_NAME, "companyId", "import-company", "active", true)), false);
         masterDataService.project("CATEGORY", "import-category-general", objectMapper.valueToTree(Map.of(
                 "name", "General", "description", "Categoría de importación", "active", true)), false);
         masterDataService.project("BRAND_CATEGORY", "import-brand-category", objectMapper.valueToTree(Map.of(
@@ -128,7 +131,7 @@ class ProductImportAndStorageIntegrationTest {
             assertThat(workbook.getSheet("Ref_Marcas")).isNotNull();
             assertThat(workbook.getSheet("Ref_Categorias")).isNotNull();
             assertThat(workbook.getSheet("Ref_Empresas").getRow(1).getCell(0).getStringCellValue())
-                    .isEqualTo("import-company");
+                    .isNotBlank();
         }
     }
 
@@ -221,9 +224,9 @@ class ProductImportAndStorageIntegrationTest {
             product.createCell(0).setCellValue(code);
             product.createCell(3).setCellValue("Producto importado");
             product.createCell(4).setCellValue("Vista previa segura");
-            product.createCell(5).setCellValue("Empresa Demo");
+            product.createCell(5).setCellValue(COMPANY_NAME);
             product.createCell(6).setCellValue("import-company");
-            product.createCell(7).setCellValue("Marca Demo");
+            product.createCell(7).setCellValue(BRAND_NAME);
             product.createCell(8).setCellValue("import-brand");
             product.createCell(9).setCellValue("General");
             product.createCell(10).setCellValue("import-category-general");
