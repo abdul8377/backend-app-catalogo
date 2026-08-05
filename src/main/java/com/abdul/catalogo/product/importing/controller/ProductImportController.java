@@ -34,13 +34,15 @@ public class ProductImportController {
 
     @GetMapping("/template")
     public ResponseEntity<byte[]> template() {
-        return download(importService.template(), "plantilla-productos-v1.xlsx");
+        return download(importService.template(), "plantilla-productos-v2.xlsx");
     }
 
     @PostMapping("/preview")
-    public String preview(@RequestParam("file") MultipartFile file, Authentication authentication, Model model) {
+    public String preview(@RequestParam("file") MultipartFile file,
+                          @RequestParam(name = "images", required = false) MultipartFile images,
+                          Authentication authentication, Model model) {
         try {
-            ProductImportPreviewResponse preview = importService.preview(file, authentication.getName());
+            ProductImportPreviewResponse preview = importService.preview(file, images, authentication.getName());
             model.addAttribute("preview", preview);
         } catch (BusinessRuleException exception) {
             model.addAttribute("error", exception.getMessage());
@@ -53,7 +55,7 @@ public class ProductImportController {
         try {
             ProductImportPreviewResponse result = importService.confirm(id);
             redirect.addFlashAttribute("message", result.status().name().equals("CONFIRMED")
-                    ? "Importación confirmada; cada producto fue publicado para sincronización."
+                    ? "Importación confirmada. Los productos e imágenes quedaron disponibles para sincronización."
                     : "La importación terminó con filas fallidas. Descarga el informe.");
         } catch (BusinessRuleException exception) {
             redirect.addFlashAttribute("error", exception.getMessage());
