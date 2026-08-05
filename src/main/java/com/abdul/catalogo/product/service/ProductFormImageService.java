@@ -11,7 +11,6 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -32,6 +31,7 @@ public class ProductFormImageService {
         if (uploads.isEmpty()) {
             ensureSinglePrimary(images);
             form.setImagesJson(write(images));
+            mergeImageConfiguration(form, images);
             return;
         }
 
@@ -40,7 +40,6 @@ public class ProductFormImageService {
         if (requestedPrimary >= 0) clearPrimary(images);
         boolean alreadyPrimary = hasPrimary(images);
 
-        List<ObjectNode> appended = new ArrayList<>();
         for (int index = 0; index < uploads.size(); index++) {
             MultipartFile upload = uploads.get(index);
             var stored = storedFileService.storeReadyProductImage(upload, form.getProductId());
@@ -48,14 +47,13 @@ public class ProductFormImageService {
             image.put("id", stored.fileId());
             image.put("sku", "");
             image.put("storageKey", stored.storageKey());
-            image.put("url", stored.url());
+            image.put("url", stored.downloadUrl());
             image.put("type", "PRODUCT");
             image.put("fileName", upload.getOriginalFilename() == null ? "imagen" : upload.getOriginalFilename());
             boolean primary = requestedPrimary == index || (requestedPrimary < 0 && !alreadyPrimary && index == 0);
             image.put("primary", primary);
             if (primary) alreadyPrimary = true;
             images.add(image);
-            appended.add(image);
         }
         ensureSinglePrimary(images);
         form.setImagesJson(write(images));
