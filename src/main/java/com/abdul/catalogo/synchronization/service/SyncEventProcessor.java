@@ -65,8 +65,16 @@ public class SyncEventProcessor {
                         previous.getServerSequence(), previous.getConflictId(),
                         "El eventId ya fue usado con un contenido diferente.");
             }
-            return new SyncEventResult(event.eventId(), SyncResultStatus.ALREADY_PROCESSED,
-                    previous.getServerVersion(), previous.getServerSequence(), previous.getConflictId(), previous.getMessage());
+            if (previous.getStatus() == SyncResultStatus.REJECTED) {
+                // Un rechazo de validación no modificó datos del negocio. Se puede
+                // reprocesar de forma segura después de actualizar el contrato o
+                // corregir una validación del servidor, conservando el eventId.
+                eventRepository.delete(previous);
+                eventRepository.flush();
+            } else {
+                return new SyncEventResult(event.eventId(), SyncResultStatus.ALREADY_PROCESSED,
+                        previous.getServerVersion(), previous.getServerSequence(), previous.getConflictId(), previous.getMessage());
+            }
         }
 
         final String entityType;
