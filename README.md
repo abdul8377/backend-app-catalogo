@@ -10,12 +10,14 @@ Servidor local Spring Boot para la aplicación Flutter offline-first. MySQL cons
 - Pull incremental con cursor entregado y confirmación separada mediante ACK.
 - Bootstrap paginado por snapshot (`last_sequence`), en orden completo de dependencias y con tombstones.
 - Escritura protegida con bloqueo por entidad, lock pesimista y versión técnica optimista.
-- Producto como agregado: clasificación estable, variantes, atributos, presentaciones, precios e imágenes.
-- CRUD web de productos, importación Excel con vista previa, confirmación por producto e informe XLSX.
+- Producto como agregado completo: clasificación, variantes, ejes, atributos técnicos, presentaciones, precios e imágenes.
+- Proyección relacional del agregado en tablas MySQL consultables, conservando además `aggregate_json` como representación íntegra para sincronización.
+- Reconstrucción automática de las proyecciones de productos existentes al iniciar el backend.
+- CRUD web de productos en tarjetas, importación Excel con vista previa, confirmación por producto e informe XLSX.
 - Almacenamiento local abstraído, claves relativas, intents con expiración y carga en tres pasos.
 - Resolución web de conflictos, retención temporal, health/info, request ID, logs rotativos y scripts de respaldo/restauración.
 
-No se crean CRUD web para empresas, marcas, categorías, clientes, pedidos, cotizaciones, preparación, cargas ni historiales. Esas entidades viajan por sincronización.
+No se crean CRUD web para empresas, marcas, categorías, clientes, pedidos, cotizaciones, preparación, cargas ni historiales. Esas entidades viajan por sincronización y permanecen disponibles en `sync_records`; los productos además se proyectan en tablas relacionales por ser el agregado administrado desde la web.
 
 ## Requisitos y configuración
 
@@ -41,7 +43,7 @@ Estas variables son opcionales mientras se usen esos valores locales. Para otro 
 
 El servidor escucha en `0.0.0.0:8081` para la red privada. MySQL no debe exponerse a la red. Las páginas principales son:
 
-- `/admin/products`: CRUD de productos.
+- `/admin/products`: catálogo visual en tarjetas y CRUD de productos.
 - `/admin/products/import`: plantilla, vista previa y confirmación Excel.
 - `/admin/devices`: servidor, QR, dispositivos, rotación y revocación.
 - `/admin/conflicts`: resolución de conflictos pendientes.
@@ -80,6 +82,22 @@ El único contrato oficial está documentado en [docs/sync-contract-v1.md](docs/
 
 La tablet no debe avanzar su cursor reconocido al recibir el pull. Primero aplica todo localmente, después confirma el `nextCursor`. Un pull repetido antes del ACK es correcto y debe ser idempotente por `entityId` + `version`.
 
+Un evento que fue `REJECTED` sin modificar datos puede reprocesarse con el mismo `eventId` y checksum después de actualizar una validación compatible del servidor. Esto permite recuperar productos rechazados por una versión anterior del contrato sin duplicarlos.
+
+## Persistencia de productos en MySQL
+
+`products` conserva la cabecera y el agregado JSON completo. La migración `V9` crea además:
+
+- `producto_variantes_catalogo`
+- `producto_familia_ejes`
+- `producto_atributos`
+- `producto_atributo_opciones`
+- `producto_presentaciones`
+- `producto_precios`
+- `producto_imagenes`
+
+Las tablas se reemplazan transaccionalmente cada vez que cambia el agregado `PRODUCT`. Al arrancar, el backend reconstruye esas proyecciones para los productos que ya estaban guardados en `products.aggregate_json`.
+
 ## Importación Excel
 
 La plantilla versionada se descarga desde `/admin/products/import/template`. Contiene las hojas `Productos`, `Variantes`, `Presentaciones`, `Precios` e `Imagenes`.
@@ -109,7 +127,7 @@ MySQL conserva propietario, tipo lógico, MIME, tamaño, checksum, visibilidad, 
 
 ## Migraciones
 
-`V1`–`V7` permanecen inmutables. `V8` agrega el snapshot estable por secuencia, correlación de conflictos y metadatos/expiración de archivos.
+`V1`–`V8` permanecen inmutables. `V9` agrega las proyecciones relacionales del producto sincronizado. Después de actualizar el código, basta reiniciar Spring Boot: Flyway crea las tablas y el reconstruidor llena los datos existentes.
 
 ## Operación en Windows
 
@@ -128,4 +146,4 @@ $env:MAVEN_OPTS='-Djavax.net.ssl.trustStoreType=Windows-ROOT'
 .\mvnw.cmd test
 ```
 
-La suite ejecuta Flyway real sobre H2 en modo MySQL y cubre fixtures contractuales, emparejamiento, revocación, idempotencia, versiones, conflictos correlacionados, pull/ACK, snapshot de bootstrap, PRODUCT agregado, producto web, Excel y expiración de archivos.
+La suite ejecuta Flyway real sobre H2 en modo MySQL y cubre fixtures contractuales, emparejamiento, revocación, idempotencia, versiones, conflictos correlacionados, pull/ACK, snapshot de bootstrap, `PRODUCT` completo, proyecciones MySQL, tarjetas web, Excel y expiración de archivos.
