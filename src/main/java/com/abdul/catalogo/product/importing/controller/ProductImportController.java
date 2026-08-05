@@ -1,6 +1,8 @@
 package com.abdul.catalogo.product.importing.controller;
 
+import com.abdul.catalogo.catalog.service.CatalogMasterDataService;
 import com.abdul.catalogo.product.importing.dto.ProductImportPreviewResponse;
+import com.abdul.catalogo.product.importing.service.ProductImportReferenceWorkbookService;
 import com.abdul.catalogo.product.importing.service.ProductImportService;
 import com.abdul.catalogo.shared.exception.BusinessRuleException;
 import org.springframework.http.ContentDisposition;
@@ -21,13 +23,24 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 @Controller
 @RequestMapping("/admin/products/import")
 public class ProductImportController {
-    private static final MediaType XLSX = MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    private final ProductImportService importService;
+    private static final MediaType XLSX = MediaType.parseMediaType(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
-    public ProductImportController(ProductImportService importService) { this.importService = importService; }
+    private final ProductImportService importService;
+    private final ProductImportReferenceWorkbookService referenceWorkbookService;
+    private final CatalogMasterDataService masterDataService;
+
+    public ProductImportController(ProductImportService importService,
+                                   ProductImportReferenceWorkbookService referenceWorkbookService,
+                                   CatalogMasterDataService masterDataService) {
+        this.importService = importService;
+        this.referenceWorkbookService = referenceWorkbookService;
+        this.masterDataService = masterDataService;
+    }
 
     @GetMapping
     public String page(@RequestParam(required = false) String id, Model model) {
+        addMasterSummary(model);
         if (id != null && !id.isBlank()) model.addAttribute("preview", importService.get(id));
         return "products/import";
     }
@@ -37,12 +50,19 @@ public class ProductImportController {
         return download(importService.template(), "plantilla-productos-v2.xlsx");
     }
 
+    @GetMapping("/master-data")
+    public ResponseEntity<byte[]> masterData() {
+        return download(referenceWorkbookService.generate(), "referencias-datos-maestros.xlsx");
+    }
+
     @PostMapping("/preview")
     public String preview(@RequestParam("file") MultipartFile file,
                           @RequestParam(name = "images", required = false) MultipartFile images,
                           Authentication authentication, Model model) {
+        addMasterSummary(model);
         try {
-            ProductImportPreviewResponse preview = importService.preview(file, images, authentication.getName());
+            ProductImportPreviewResponse preview = importService.preview(
+                    file, images, authentication.getName());
             model.addAttribute("preview", preview);
         } catch (BusinessRuleException exception) {
             model.addAttribute("error", exception.getMessage());
@@ -68,9 +88,16 @@ public class ProductImportController {
         return download(importService.report(id), "informe-importacion-" + id + ".xlsx");
     }
 
+    private void addMasterSummary(Model model) {
+        model.addAttribute("masterSummary", masterDataService.summary());
+    }
+
     private ResponseEntity<byte[]> download(byte[] bytes, String name) {
-        return ResponseEntity.ok().contentType(XLSX).contentLength(bytes.length)
-                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(name).build().toString())
+        return ResponseEntity.ok()
+                .contentType(XLSX)
+                .contentLength(bytes.length)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(name).build().toString())
                 .body(bytes);
     }
 }

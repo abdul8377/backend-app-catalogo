@@ -1,5 +1,7 @@
 package com.abdul.catalogo.synchronization.service;
 
+import com.abdul.catalogo.catalog.service.CatalogMasterDataService;
+import com.abdul.catalogo.catalog.service.CatalogMasterProjectionExecutor;
 import com.abdul.catalogo.product.service.ProductProjectionService;
 import com.abdul.catalogo.shared.config.ContractProperties;
 import com.abdul.catalogo.shared.crypto.Digests;
@@ -35,12 +37,16 @@ public class SyncEventProcessor {
     private final ChangeLogRepository changeRepository;
     private final SyncConflictRepository conflictRepository;
     private final ProductProjectionService productProjectionService;
+    private final CatalogMasterDataService masterDataService;
+    private final CatalogMasterProjectionExecutor masterProjectionExecutor;
     private final ObjectMapper objectMapper;
     private final ContractProperties contractProperties;
 
     public SyncEventProcessor(SyncEntityCatalog entityCatalog, SyncRecordRepository recordRepository,
                               ProcessedEventRepository eventRepository, ChangeLogRepository changeRepository,
                               SyncConflictRepository conflictRepository, ProductProjectionService productProjectionService,
+                              CatalogMasterDataService masterDataService,
+                              CatalogMasterProjectionExecutor masterProjectionExecutor,
                               ObjectMapper objectMapper, ContractProperties contractProperties) {
         this.entityCatalog = entityCatalog;
         this.recordRepository = recordRepository;
@@ -48,6 +54,8 @@ public class SyncEventProcessor {
         this.changeRepository = changeRepository;
         this.conflictRepository = conflictRepository;
         this.productProjectionService = productProjectionService;
+        this.masterDataService = masterDataService;
+        this.masterProjectionExecutor = masterProjectionExecutor;
         this.objectMapper = objectMapper;
         this.contractProperties = contractProperties;
     }
@@ -116,6 +124,17 @@ public class SyncEventProcessor {
                     currentVersion, null, conflictId, message);
         }
 
+        String projectionWarning = null;
+        if (masterDataService.supports(entityType)) {
+            try {
+                masterProjectionExecutor.project(entityType, event.entityId(), event.payload(),
+                        event.operation() == SyncOperation.DELETE);
+            } catch (BusinessRuleException exception) {
+                projectionWarning = "Dato sincronizado, pero pendiente de proyección relacional: "
+                        + exception.getMessage();
+            }
+        }
+
         if (record == null) {
             record = new SyncRecordEntity();
             record.setId(UUID.randomUUID().toString());
@@ -149,9 +168,9 @@ public class SyncEventProcessor {
         recordRepository.save(record);
 
         saveProcessed(event, deviceId, requestChecksum, SyncResultStatus.ACCEPTED,
-                nextVersion, change.getSequence(), null, null);
+                nextVersion, change.getSequence(), null, projectionWarning);
         return new SyncEventResult(event.eventId(), SyncResultStatus.ACCEPTED,
-                nextVersion, change.getSequence(), null, null);
+                nextVersion, change.getSequence(), null, projectionWarning);
     }
 
     /**

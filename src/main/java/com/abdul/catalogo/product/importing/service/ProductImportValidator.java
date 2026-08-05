@@ -1,5 +1,6 @@
 package com.abdul.catalogo.product.importing.service;
 
+import com.abdul.catalogo.catalog.service.CatalogMasterDataService;
 import com.abdul.catalogo.product.dto.ProductResponse;
 import com.abdul.catalogo.product.importing.model.ProductImportAction;
 import com.abdul.catalogo.product.importing.model.ProductImportRowStatus;
@@ -19,12 +20,15 @@ public class ProductImportValidator {
     private final ProductService productService;
     private final ProductProjectionService projectionService;
     private final ProductImportImageService imageService;
+    private final CatalogMasterDataService masterDataService;
 
     public ProductImportValidator(ProductService productService, ProductProjectionService projectionService,
-                                  ProductImportImageService imageService) {
+                                  ProductImportImageService imageService,
+                                  CatalogMasterDataService masterDataService) {
         this.productService = productService;
         this.projectionService = projectionService;
         this.imageService = imageService;
+        this.masterDataService = masterDataService;
     }
 
     public ValidationResult validate(ProductImportCandidate candidate) {
@@ -38,13 +42,17 @@ public class ProductImportValidator {
             action = ProductImportAction.UPDATE;
             try {
                 ProductResponse existing = productService.get(productId);
-                if (expectedVersion == null) messages.add("Version es obligatoria cuando se indica ProductoId.");
-                else if (expectedVersion != existing.version()) messages.add("La versión indicada ya no es la vigente (" + existing.version() + ").");
+                if (expectedVersion == null) {
+                    messages.add("Version es obligatoria cuando se indica ProductoId.");
+                } else if (expectedVersion != existing.version()) {
+                    messages.add("La versión indicada ya no es la vigente (" + existing.version() + ").");
+                }
             } catch (ResourceNotFoundException exception) {
                 messages.add("ProductoId no existe en el servidor.");
             }
         } else if (productService.findByCode(candidate.familyCode()).isPresent()) {
-            messages.add("El código ya existe. Para actualizar debe indicar ProductoId y Version; el código solo valida unicidad.");
+            messages.add("El código ya existe. Para actualizar debe indicar ProductoId y Version; "
+                    + "el código solo valida unicidad.");
         }
 
         ObjectNode aggregate = candidate.aggregate().deepCopy();
@@ -52,6 +60,7 @@ public class ProductImportValidator {
         aggregate.put("productId", validationId);
         if (candidate.errors().isEmpty()) {
             try {
+                masterDataService.canonicalizeRequired(aggregate);
                 projectionService.validateUpsert(validationId, imageService.previewAggregate(aggregate));
             } catch (BusinessRuleException exception) {
                 messages.add(exception.getMessage());
@@ -61,7 +70,8 @@ public class ProductImportValidator {
         int blocking = messages.size() - candidate.warnings().size();
         if (blocking > 0) {
             action = ProductImportAction.REJECT;
-            return new ValidationResult(action, ProductImportRowStatus.ERROR, productId, expectedVersion, List.copyOf(messages));
+            return new ValidationResult(
+                    action, ProductImportRowStatus.ERROR, productId, expectedVersion, List.copyOf(messages));
         }
         ProductImportRowStatus status = candidate.warnings().isEmpty()
                 ? ProductImportRowStatus.VALID : ProductImportRowStatus.WARNING;

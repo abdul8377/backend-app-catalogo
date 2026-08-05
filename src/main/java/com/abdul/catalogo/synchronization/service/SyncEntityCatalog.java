@@ -16,16 +16,31 @@ public class SyncEntityCatalog {
             "LEGACY_ATTRIBUTE_DEFINITION", "PRODUCT", "CLIENT", "ORDER_SHEET", "ORDER",
             "ORDER_ITEM", "QUOTE", "QUOTE_ITEM", "PREPARATION", "PREPARATION_STOCK_MOVEMENT",
             "ORDER_LOAD", "ORDER_HISTORY", "ORDER_SHEET_HISTORY");
-    private static final Set<String> SUPPORTED_TYPES = java.util.Collections.unmodifiableSet(new LinkedHashSet<>(DEPENDENCY_ORDER));
-    private static final Set<String> APPEND_ONLY = Set.of("PREPARATION_STOCK_MOVEMENT", "ORDER_HISTORY", "ORDER_SHEET_HISTORY");
+    private static final Set<String> SUPPORTED_TYPES =
+            java.util.Collections.unmodifiableSet(new LinkedHashSet<>(DEPENDENCY_ORDER));
+    private static final Set<String> APPEND_ONLY =
+            Set.of("PREPARATION_STOCK_MOVEMENT", "ORDER_HISTORY", "ORDER_SHEET_HISTORY");
 
     public String normalizeAndValidate(String value) {
         String normalized = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
         if (!SUPPORTED_TYPES.contains(normalized)) {
-            throw new BusinessRuleException("UNSUPPORTED_ENTITY_TYPE", "El tipo de entidad no está habilitado: " + normalized);
+            throw new BusinessRuleException("UNSUPPORTED_ENTITY_TYPE",
+                    "El tipo de entidad no está habilitado: " + normalized);
         }
         return normalized;
     }
-    public Set<String> supportedTypes() { return SUPPORTED_TYPES; }
-    public boolean isAppendOnly(String entityType) { return APPEND_ONLY.contains(entityType); }
+
+    public int dependencyRank(String entityType) {
+        String normalized = entityType == null ? "" : entityType.trim().toUpperCase(Locale.ROOT);
+        int index = DEPENDENCY_ORDER.indexOf(normalized);
+        return index < 0 ? DEPENDENCY_ORDER.size() + 1 : index;
+    }
+
+    public Set<String> supportedTypes() {
+        return SUPPORTED_TYPES;
+    }
+
+    public boolean isAppendOnly(String entityType) {
+        return APPEND_ONLY.contains(entityType);
+    }
 }
