@@ -1,5 +1,6 @@
 package com.abdul.catalogo.product.importing.service;
 
+import com.abdul.catalogo.catalog.service.CatalogMasterDataService;
 import com.abdul.catalogo.product.dto.ProductResponse;
 import com.abdul.catalogo.product.importing.entity.ProductImportEntity;
 import com.abdul.catalogo.product.importing.entity.ProductImportRowEntity;
@@ -30,15 +31,20 @@ public class ProductImportExecutor {
     private final ProductImportRowRepository rowRepository;
     private final ProductService productService;
     private final ProductImportImageService imageService;
+    private final CatalogMasterDataService masterDataService;
     private final ObjectMapper objectMapper;
 
-    public ProductImportExecutor(ProductImportRepository importRepository, ProductImportRowRepository rowRepository,
-                                 ProductService productService, ProductImportImageService imageService,
+    public ProductImportExecutor(ProductImportRepository importRepository,
+                                 ProductImportRowRepository rowRepository,
+                                 ProductService productService,
+                                 ProductImportImageService imageService,
+                                 CatalogMasterDataService masterDataService,
                                  ObjectMapper objectMapper) {
         this.importRepository = importRepository;
         this.rowRepository = rowRepository;
         this.productService = productService;
         this.imageService = imageService;
+        this.masterDataService = masterDataService;
         this.objectMapper = objectMapper;
     }
 
@@ -55,15 +61,18 @@ public class ProductImportExecutor {
         }
         item.setStatus(ProductImportStatus.CONFIRMING);
         return rowRepository.findByImportIdOrderByRowNumber(importId).stream()
-                .filter(row -> row.getAction() == ProductImportAction.CREATE || row.getAction() == ProductImportAction.UPDATE)
+                .filter(row -> row.getAction() == ProductImportAction.CREATE
+                        || row.getAction() == ProductImportAction.UPDATE)
                 .filter(row -> row.getStatus() != ProductImportRowStatus.IMPORTED)
-                .map(ProductImportRowEntity::getId).toList();
+                .map(ProductImportRowEntity::getId)
+                .toList();
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void executeRow(String rowId) {
         ProductImportRowEntity row = rowRepository.findById(rowId)
-                .orElseThrow(() -> new ResourceNotFoundException("IMPORT_ROW_NOT_FOUND", "La fila de importación no existe."));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "IMPORT_ROW_NOT_FOUND", "La fila de importación no existe."));
         if (row.getStatus() == ProductImportRowStatus.IMPORTED) return;
         ProductImportEntity importItem = importRepository.findById(row.getImportId())
                 .orElseThrow(() -> new ResourceNotFoundException("IMPORT_NOT_FOUND", "La importación no existe."));
@@ -73,6 +82,7 @@ public class ProductImportExecutor {
                 : row.getProductId();
         if (productId == null || productId.isBlank()) productId = UUID.randomUUID().toString();
         aggregate.put("productId", productId);
+        masterDataService.canonicalizeRequired(aggregate);
         aggregate = imageService.materialize(importItem, productId, aggregate);
 
         ProductResponse result;
@@ -110,12 +120,16 @@ public class ProductImportExecutor {
             if (node == null || !node.isObject()) throw new IllegalArgumentException();
             return (ObjectNode) node;
         } catch (JacksonException | IllegalArgumentException exception) {
-            throw new BusinessRuleException("INVALID_IMPORT_CANDIDATE", "La fila almacenada contiene JSON inválido.");
+            throw new BusinessRuleException(
+                    "INVALID_IMPORT_CANDIDATE", "La fila almacenada contiene JSON inválido.");
         }
     }
 
     private String writeMessages(List<String> messages) {
-        try { return objectMapper.writeValueAsString(messages); }
-        catch (JacksonException exception) { return "[\"Error al serializar el mensaje\"]"; }
+        try {
+            return objectMapper.writeValueAsString(messages);
+        } catch (JacksonException exception) {
+            return "[\"Error al serializar el mensaje\"]";
+        }
     }
 }
