@@ -1,21 +1,215 @@
 <!doctype html>
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title th:text="${editing ? 'Editar producto' : 'Nuevo producto'}"></title><link rel="stylesheet" th:href="@{/css/admin.css}"><link rel="stylesheet" th:href="@{/css/admin-v2.css}"></head>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${editing ? 'Editar producto · App Catálogo' : 'Nuevo producto · App Catálogo'}">Producto</title>
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+    <link rel="stylesheet" th:href="@{/css/admin-v2.css}">
+    <link rel="stylesheet" th:href="@{/css/product-wizard.css}">
+</head>
 <body>
-<header class="topbar"><div><strong>App Catálogo</strong><span>Servidor local</span></div><nav><a class="active" th:href="@{/admin/products}">Productos</a><a th:href="@{/admin/products/import}">Importar Excel</a><a th:href="@{/admin/devices}">Dispositivos</a></nav></header>
-<main class="container">
-<a class="back" th:href="@{/admin/products}">← Volver a productos</a>
-<section class="page-heading"><div><p class="eyebrow">Agregado sincronizable</p><h1 th:text="${editing ? 'Editar producto' : 'Nuevo producto'}"></h1><p>Producto, variantes, presentaciones, precios e imágenes se publican juntos en una transacción.</p></div></section>
-<form class="card product-form" method="post" th:object="${productForm}" th:action="${editing ? '/admin/products/' + productId : '/admin/products'}">
-<input type="hidden" th:field="*{version}"><div class="form-error" th:if="${#fields.hasGlobalErrors()}" th:each="error : ${#fields.globalErrors()}" th:text="${error}"></div>
-<h2>Información general</h2><div class="grid two"><label>Código de familia<input th:field="*{code}" required><small class="error" th:errors="*{code}"></small></label><label>Nombre<input th:field="*{name}" required><small class="error" th:errors="*{name}"></small></label></div>
-<label>Descripción<textarea th:field="*{description}" rows="3"></textarea></label><div class="grid three"><label>Tipo<select th:field="*{productType}"><option th:each="type : ${productTypes}" th:value="${type}" th:text="${type}"></option></select></label><label>Estado<select th:field="*{status}"><option th:each="status : ${statuses}" th:value="${status}" th:text="${status}"></option></select></label><label>Versión<input th:value="*{version}" disabled></label></div>
-<h2>Clasificación estable</h2><div class="grid two"><label>Empresa<input th:field="*{company}"></label><label>ID empresa<input th:field="*{companyId}" placeholder="Se genera si queda vacío"></label><label>Marca<input th:field="*{brand}"></label><label>ID marca<input th:field="*{brandId}" placeholder="Se genera si queda vacío"></label><label>Categoría<input th:field="*{category}"></label><label>ID categoría<input th:field="*{categoryId}" placeholder="Se genera si queda vacío"></label><label>Subcategoría<input th:field="*{subcategory}"></label><label>ID subcategoría<input th:field="*{subcategoryId}" placeholder="Se genera si queda vacío"></label></div>
-<h2>Contenido del agregado</h2><p class="help">Las variantes requieren SKU único; presentaciones y precios deben referenciar esos SKU.</p>
-<label>Atributos comunes (objeto JSON)<textarea class="code-editor" th:field="*{attributesJson}" rows="5" spellcheck="false"></textarea></label>
-<label>Variantes (arreglo JSON)<textarea class="code-editor" th:field="*{variantsJson}" rows="9" spellcheck="false" required></textarea></label>
-<label>Presentaciones (arreglo JSON)<textarea class="code-editor" th:field="*{presentationsJson}" rows="7" spellcheck="false"></textarea></label>
-<label>Precios (arreglo JSON)<textarea class="code-editor" th:field="*{pricesJson}" rows="7" spellcheck="false"></textarea></label>
-<label>Imágenes (arreglo JSON; claves relativas)<textarea class="code-editor" th:field="*{imagesJson}" rows="6" spellcheck="false"></textarea></label>
-<div class="form-actions"><a class="button" th:href="@{/admin/products}">Cancelar</a><button class="button primary" type="submit">Validar y guardar agregado</button></div>
-</form></main></body></html>
+<header class="topbar">
+    <div class="brand-lockup">
+        <span class="brand-mark">AC</span>
+        <div class="brand-copy"><strong>App Catálogo</strong><span>Administración local</span></div>
+    </div>
+    <nav>
+        <a class="active" th:href="@{/admin/products}">Productos</a>
+        <a th:href="@{/admin/products/import}">Importar Excel</a>
+        <a th:href="@{/admin/devices}">Dispositivos</a>
+    </nav>
+</header>
+
+<main class="container product-wizard-page">
+    <a class="back" th:href="@{/admin/products}">← Volver al catálogo</a>
+    <form class="wizard-shell" data-product-wizard th:object="${productForm}"
+          method="post" enctype="multipart/form-data"
+          th:action="${editing} ? @{/admin/products/{id}(id=${productId})} : @{/admin/products}">
+
+        <input type="hidden" th:field="*{productId}">
+        <input type="hidden" th:field="*{version}">
+        <input type="hidden" th:field="*{companyId}">
+        <input type="hidden" th:field="*{brandId}">
+        <input type="hidden" th:field="*{categoryId}">
+        <input type="hidden" th:field="*{subcategoryId}">
+        <input type="hidden" th:field="*{attributesJson}">
+        <input type="hidden" th:field="*{variantsJson}">
+        <input type="hidden" th:field="*{presentationsJson}">
+        <input type="hidden" th:field="*{pricesJson}">
+        <input type="hidden" th:field="*{imagesJson}">
+        <input type="hidden" th:field="*{salesConfigurationJson}">
+        <input type="hidden" th:field="*{pricingConfigurationJson}">
+        <input type="hidden" th:field="*{imageConfigurationJson}">
+        <input type="hidden" th:field="*{familyAxesJson}">
+        <input type="hidden" th:field="*{attributeValuesJson}">
+        <input type="hidden" th:field="*{attributeOptionsJson}">
+        <input type="hidden" th:field="*{primaryUploadedImage}">
+
+        <header class="wizard-header">
+            <div class="wizard-heading">
+                <div>
+                    <p class="eyebrow" th:text="${editing ? 'Edición sincronizable' : 'Registro guiado'}">Registro guiado</p>
+                    <h1 th:text="${editing ? 'Editar producto' : 'Nuevo producto'}">Nuevo producto</h1>
+                    <p>El mismo agregado que utiliza Flutter: clasificación, familia, variantes, presentaciones, precios, imágenes y revisión.</p>
+                </div>
+                <span class="wizard-save-state" th:text="${editing ? 'Versión ' + productForm.version : 'Nuevo borrador'}">Nuevo borrador</span>
+            </div>
+            <div class="wizard-steps" aria-label="Pasos del producto">
+                <button class="wizard-step-button active" type="button" data-wizard-step>Clasificación</button>
+                <button class="wizard-step-button" type="button" data-wizard-step>Producto y variantes</button>
+                <button class="wizard-step-button" type="button" data-wizard-step>Venta y logística</button>
+                <button class="wizard-step-button" type="button" data-wizard-step>Precios</button>
+                <button class="wizard-step-button" type="button" data-wizard-step>Imágenes</button>
+                <button class="wizard-step-button" type="button" data-wizard-step>Revisión</button>
+            </div>
+        </header>
+
+        <div class="wizard-body">
+            <div class="form-error" th:if="${#fields.hasAnyErrors()}">
+                <strong>No se pudo guardar el producto.</strong>
+                <ul class="messages"><li th:each="error : ${#fields.allErrors()}" th:text="${error}"></li></ul>
+            </div>
+            <div class="wizard-alert" data-wizard-alert></div>
+
+            <section class="wizard-panel active" data-wizard-panel>
+                <div class="wizard-panel-heading">
+                    <div><h2>1. Empresa, marca y categoría</h2><p>Utiliza las referencias ya sincronizadas desde la tablet. Cambiar esta clasificación invalida configuraciones dependientes.</p></div>
+                </div>
+                <article class="wizard-card">
+                    <div class="wizard-grid">
+                        <div class="wizard-field field-span-6"><label for="company">Empresa *</label><input id="company" th:field="*{company}" maxlength="160" placeholder="Empresa propietaria de la marca" required><small>La empresa y la marca se administran desde la tablet.</small></div>
+                        <div class="wizard-field field-span-6"><label for="brand">Marca *</label><input id="brand" th:field="*{brand}" maxlength="160" placeholder="Marca comercial" required></div>
+                        <div class="wizard-field field-span-6"><label for="category">Categoría *</label><input id="category" th:field="*{category}" maxlength="160" placeholder="Ej. Sistema de rueda" required></div>
+                        <div class="wizard-field field-span-6"><label for="subcategory">Subcategoría</label><input id="subcategory" th:field="*{subcategory}" maxlength="160" placeholder="Opcional"></div>
+                    </div>
+                </article>
+            </section>
+
+            <section class="wizard-panel" data-wizard-panel>
+                <div class="wizard-panel-heading">
+                    <div><h2>2. Producto y variantes</h2><p>Define la familia y los artículos vendibles. No se permite guardar SKU repetidos ni variantes sin nombre.</p></div>
+                </div>
+                <article class="wizard-card">
+                    <h3>Identificación de la familia</h3>
+                    <p class="help">El código identifica la familia; cada variante tendrá su propio SKU.</p>
+                    <div class="wizard-grid">
+                        <div class="wizard-field field-span-4"><label for="code">Código interno *</label><input id="code" th:field="*{code}" maxlength="100" placeholder="PERNO-EJE-MOTO" required></div>
+                        <div class="wizard-field field-span-8"><label for="name">Nombre comercial / familia *</label><input id="name" th:field="*{name}" maxlength="250" placeholder="Perno eje de moto pavonado" required></div>
+                        <div class="wizard-field field-span-12"><label for="description">Descripción</label><textarea id="description" th:field="*{description}" rows="3" maxlength="2000" placeholder="Descripción breve para catálogo y búsqueda"></textarea></div>
+                    </div>
+                </article>
+
+                <article class="wizard-card">
+                    <h3>Tipo de registro</h3>
+                    <p class="help">La estructura cambia igual que en la tablet. Al cambiar el tipo deben revisarse variantes, presentaciones y precios.</p>
+                    <div class="product-type-options">
+                        <label class="product-type-option"><input type="radio" th:field="*{productType}" value="SINGLE"><strong>Producto único</strong><span>Crea exactamente una variante automática.</span></label>
+                        <label class="product-type-option"><input type="radio" th:field="*{productType}" value="LIST"><strong>Lista de variantes</strong><span>Cada artículo tiene SKU y atributos propios.</span></label>
+                        <label class="product-type-option"><input type="radio" th:field="*{productType}" value="MATRIX"><strong>Matriz de variantes</strong><span>Genera combinaciones a partir de dos ejes.</span></label>
+                    </div>
+                </article>
+
+                <article class="wizard-card">
+                    <div class="wizard-panel-heading"><div><h3>Características comunes</h3><p>Material, acabado, norma u otros valores compartidos por la familia.</p></div><button class="secondary-action" type="button" data-add-attribute>+ Agregar atributo</button></div>
+                    <div class="repeater" data-attributes></div>
+                </article>
+
+                <article class="wizard-card">
+                    <div class="wizard-panel-heading"><div><h3>Variantes vendibles</h3><p>Para atributos use el formato: Rosca=M12; Largo=40 mm.</p></div><button class="secondary-action" type="button" data-add-variant>+ Agregar variante</button></div>
+                    <div class="matrix-builder hidden" data-matrix-builder>
+                        <div class="wizard-field"><label>Eje A</label><input name="matrixAxisAName" placeholder="Diámetro"><input name="matrixAxisAValues" placeholder="M8, M10, M12"></div>
+                        <div class="wizard-field"><label>Eje B</label><input name="matrixAxisBName" placeholder="Largo"><input name="matrixAxisBValues" placeholder="20 mm, 30 mm, 40 mm"></div>
+                        <button class="button" type="button" data-generate-matrix>Generar matriz</button>
+                    </div>
+                    <div class="repeater" data-variants></div>
+                </article>
+            </section>
+
+            <section class="wizard-panel" data-wizard-panel>
+                <div class="wizard-panel-heading">
+                    <div><h2>3. Venta, presentaciones y logística</h2><p>Define cómo pide el cliente el producto. Una presentación vacía en SKU se aplica a todas las variantes activas.</p></div>
+                    <button class="secondary-action" type="button" data-add-presentation>+ Nueva presentación</button>
+                </div>
+                <article class="wizard-card">
+                    <h3>Presentaciones de venta</h3>
+                    <p class="help">Ejemplos: Unidad, Ciento, Caja x100, Kilogramo, Metro o Rollo. Equivalencia, mínimo e incremento deben ser mayores que cero.</p>
+                    <div class="repeater" data-presentations></div>
+                </article>
+                <article class="wizard-card">
+                    <h3>Empaques logísticos y contenido</h3>
+                    <p class="help">Los empaques y componentes avanzados que ya llegaron desde la tablet se conservan al editar. La primera versión web prioriza las presentaciones vendibles para evitar duplicar reglas incorrectamente.</p>
+                    <div class="review-list">
+                        <div class="review-item"><strong>Empaques logísticos</strong><span>No modifican directamente el precio de venta.</span></div>
+                        <div class="review-item"><strong>Contenido del producto</strong><span>Se conserva para kits, juegos, accesorios y repuestos.</span></div>
+                    </div>
+                </article>
+            </section>
+
+            <section class="wizard-panel" data-wizard-panel>
+                <div class="wizard-panel-heading"><div><h2>4. Precios</h2><p>Se generan filas para cada combinación de variante y presentación vendible.</p></div></div>
+                <article class="wizard-card">
+                    <h3>Combinaciones comerciales</h3>
+                    <p class="help">Un producto activo debe tener precio o estar marcado “Por cotizar” en cada combinación.</p>
+                    <div class="repeater" data-prices></div>
+                </article>
+            </section>
+
+            <section class="wizard-panel" data-wizard-panel>
+                <div class="wizard-panel-heading"><div><h2>5. Imágenes</h2><p>Galería familiar con una sola imagen principal. JPG, PNG o WebP.</p></div></div>
+                <article class="wizard-card">
+                    <div class="image-picker">
+                        <strong>Agregar imágenes nuevas</strong>
+                        <p class="help">Las imágenes se guardan en el disco de la PC y MySQL conserva únicamente su referencia.</p>
+                        <input type="file" name="imageFiles" accept="image/jpeg,image/png,image/webp" multiple>
+                    </div>
+                    <div class="image-gallery" data-new-images></div>
+                </article>
+                <article class="wizard-card">
+                    <h3>Galería guardada</h3>
+                    <p class="help">Quitar una referencia de la galería no borra de inmediato el archivo físico; podrá limpiarse mediante mantenimiento seguro.</p>
+                    <div class="image-gallery" data-image-gallery></div>
+                </article>
+            </section>
+
+            <section class="wizard-panel" data-wizard-panel>
+                <div class="wizard-panel-heading"><div><h2>6. Revisar y publicar</h2><p>Guarda como borrador o activa cuando precios e imagen principal estén completos.</p></div></div>
+                <div class="wizard-summary">
+                    <article class="summary-card"><span>Clasificación</span><strong data-review-classification>—</strong></article>
+                    <article class="summary-card"><span>Producto</span><strong data-review-product>—</strong></article>
+                    <article class="summary-card"><span>Estado</span><strong th:text="*{status}">DRAFT</strong></article>
+                </div>
+                <div class="review-list">
+                    <div class="review-item"><strong>Variantes</strong><span data-review-variants>—</span></div>
+                    <div class="review-item"><strong>Presentaciones</strong><span data-review-presentations>—</span></div>
+                    <div class="review-item"><strong>Precios</strong><span data-review-prices>—</span></div>
+                    <div class="review-item"><strong>Imágenes</strong><span data-review-images>—</span></div>
+                </div>
+                <article class="wizard-card" style="margin-top:17px">
+                    <div class="wizard-grid">
+                        <div class="wizard-field field-span-6">
+                            <label for="status">Estado al guardar</label>
+                            <select id="status" th:field="*{status}">
+                                <option th:each="status : ${statuses}" th:value="${status}" th:text="${status == T(com.abdul.catalogo.product.model.ProductStatus).DRAFT ? 'Borrador' : (status == T(com.abdul.catalogo.product.model.ProductStatus).ACTIVE ? 'Activo' : 'Inactivo')}"></option>
+                            </select>
+                            <small>Activo exige al menos una variante activa, presentaciones completas, precios o cotización e imagen principal.</small>
+                        </div>
+                    </div>
+                </article>
+            </section>
+        </div>
+
+        <footer class="wizard-footer">
+            <button class="button" type="button" data-wizard-previous>← Anterior</button>
+            <div class="wizard-footer-right">
+                <a class="button" th:href="@{/admin/products}">Cancelar</a>
+                <button class="button primary" type="button" data-wizard-next>Siguiente →</button>
+                <button class="button primary" type="submit" data-wizard-submit hidden th:text="${editing ? 'Guardar cambios' : 'Crear producto'}">Crear producto</button>
+            </div>
+        </footer>
+    </form>
+</main>
+<script th:src="@{/js/product-wizard.js}" defer></script>
+<script th:src="@{/js/product-wizard-preserve.js}" defer></script>
+</body>
+</html>
