@@ -18,11 +18,11 @@ public class V12__link_products_to_catalog_masters extends BaseJavaMigration {
     public void migrate(Context context) throws Exception {
         Connection connection = context.getConnection();
 
-        ensureColumn(connection, "company_id", "VARCHAR(160) NULL");
-        ensureColumn(connection, "brand_id", "VARCHAR(160) NULL");
-        ensureColumn(connection, "category_id", "VARCHAR(160) NULL");
+        ensureColumn(connection, "company_id", "VARCHAR(160)");
+        ensureColumn(connection, "brand_id", "VARCHAR(160)");
+        ensureColumn(connection, "category_id", "VARCHAR(160)");
         ensureColumn(connection, "subcategory", "VARCHAR(160) NOT NULL DEFAULT ''");
-        ensureColumn(connection, "subcategory_id", "VARCHAR(160) NULL");
+        ensureColumn(connection, "subcategory_id", "VARCHAR(160)");
         ensureColumn(connection, "product_type", "VARCHAR(20) NOT NULL DEFAULT 'SINGLE'");
 
         ensureForeignKey(connection, "fk_product_company",
