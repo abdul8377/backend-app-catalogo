@@ -27,6 +27,7 @@ import java.util.UUID;
 @Service
 public class StoredFileService {
     private static final Set<String> ALLOWED_TYPES = Set.of("image/jpeg", "image/png", "image/webp", "application/pdf");
+    private static final Set<String> IMAGE_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
     private final StoredFileRepository repository;
     private final StorageService storageService;
     private final StorageProperties properties;
@@ -52,6 +53,68 @@ public class StoredFileService {
                 file.getContentType(), file.getSizeBytes(), file.getChecksumSha256(), file.getVisibility(), file.getStatus(),
                 file.getExpiresAt(), "/api/v1/files/intents/" + id + "/content",
                 "/api/v1/files/intents/" + id + "/complete");
+    }
+
+    /**
+     * Carga confiable desde una pantalla administrativa o una importación.
+     * No usa intent porque el archivo ya se encuentra dentro del servidor.
+     */
+    @Transactional
+    public StoredFileResponse storeReadyProductImage(MultipartFile upload, String ownerId) {
+        if (upload == null || upload.isEmpty()) {
+            throw new BusinessRuleException("EMPTY_PRODUCT_IMAGE", "Selecciona una imagen válida.");
+        }
+        try {
+            return storeReadyProductImage(safeName(upload.getOriginalFilename()), upload.getContentType(), upload.getBytes(), ownerId);
+        } catch (IOException exception) {
+            throw new BusinessRuleException("FILE_READ_ERROR", "No se pudo leer la imagen seleccionada.");
+        }
+    }
+
+    @Transactional
+    public StoredFileResponse storeReadyProductImage(String fileName, String contentType, byte[] bytes, String ownerId) {
+        String mime = contentType == null ? "" : contentType.toLowerCase().trim();
+        if (!IMAGE_TYPES.contains(mime)) {
+            throw new BusinessRuleException("FILE_MIME_NOT_ALLOWED", "Las imágenes deben ser JPG, PNG o WebP.");
+        }
+        if (bytes == null || bytes.length == 0) {
+            throw new BusinessRuleException("EMPTY_PRODUCT_IMAGE", "La imagen está vacía.");
+        }
+        if (bytes.length > properties.maxFileSizeBytes()) {
+            throw new BusinessRuleException("FILE_TOO_LARGE", "La imagen supera el máximo permitido.");
+        }
+        String safeOwner = ownerId == null ? "" : ownerId.trim();
+        if (safeOwner.isBlank()) {
+            throw new BusinessRuleException("PRODUCT_IMAGE_OWNER_REQUIRED", "La imagen necesita un producto propietario.");
+        }
+
+        String id = UUID.randomUUID().toString();
+        String key = "files/" + id + "/content";
+        String checksum = Digests.sha256(bytes);
+        Instant now = Instant.now();
+        try {
+            storageService.store(key, new ByteArrayInputStream(bytes), bytes.length);
+        } catch (IOException exception) {
+            throw new BusinessRuleException("FILE_STORAGE_ERROR", "No se pudo guardar la imagen en el disco.");
+        }
+
+        StoredFileEntity file = new StoredFileEntity();
+        file.setId(id);
+        file.setStorageKey(key);
+        file.setFileType(StoredFileType.PRODUCT_IMAGE);
+        file.setOriginalName(safeName(fileName));
+        file.setContentType(mime);
+        file.setSizeBytes((long) bytes.length);
+        file.setChecksumSha256(checksum);
+        file.setVisibility(FileVisibility.PUBLIC);
+        file.setStatus(StoredFileStatus.READY);
+        file.setOwnerType("PRODUCT");
+        file.setOwnerId(safeOwner);
+        file.setCreatedAt(now);
+        file.setUploadedAt(now);
+        file.setCompletedAt(now);
+        repository.saveAndFlush(file);
+        return response(file);
     }
 
     @Transactional
@@ -111,7 +174,10 @@ public class StoredFileService {
         }
     }
     private StoredFileResponse response(StoredFileEntity file) { return new StoredFileResponse(file.getId(), file.getStorageKey(), file.getFileType(), file.getOwnerType(), file.getOwnerId(), file.getVisibility() == FileVisibility.PUBLIC ? "/public/files/" + file.getId() : "/api/v1/files/" + file.getId(), file.getContentType(), file.getSizeBytes(), file.getChecksumSha256(), file.getVisibility(), file.getStatus(), file.getCreatedAt(), file.getExpiresAt(), file.getUploadedAt(), file.getCompletedAt()); }
-    private String safeName(String name) { return Path.of(name.replace('\\', '/')).getFileName().toString(); }
+    private String safeName(String name) {
+        String value = name == null || name.isBlank() ? "imagen" : name;
+        return Path.of(value.replace('\\', '/')).getFileName().toString();
+    }
     private String normalize(String value) { return value == null ? "" : value.trim().toUpperCase(); }
     public record Download(String fileName, String contentType, Resource resource) {}
 }
