@@ -11,22 +11,42 @@
 <body>
 <header class="topbar">
     <div class="brand-lockup"><span class="brand-mark">AC</span><div class="brand-copy"><strong>App Catálogo</strong><span>Administración local</span></div></div>
-    <nav><a th:href="@{/admin/products}">Productos</a><a class="active" th:href="@{/admin/products/import}">Importar Excel</a><a th:href="@{/admin/devices}">Dispositivos</a></nav>
+    <nav>
+        <a th:href="@{/admin/products}">Productos</a>
+        <a th:href="@{/admin/masters/import}">Datos maestros</a>
+        <a class="active" th:href="@{/admin/products/import}">Importar productos</a>
+        <a th:href="@{/admin/devices}">Dispositivos</a>
+    </nav>
 </header>
 <main class="container">
     <section class="catalog-hero">
-        <div><p class="eyebrow">Carga masiva controlada</p><h1>Importar productos</h1><p class="hero-copy">La importación crea únicamente productos, variantes, atributos, presentaciones, precios e imágenes. No crea empresas, marcas, categorías, clientes ni pedidos.</p></div>
-        <a class="button primary" th:href="@{/admin/products/import/template}">Descargar plantilla v2</a>
+        <div><p class="eyebrow">Carga masiva controlada</p><h1>Importar productos</h1><p class="hero-copy">La importación crea únicamente productos, variantes, atributos, presentaciones, precios e imágenes. Empresa, marca, categorías, unidades, atributos y listas de precios deben existir previamente.</p></div>
+        <div class="button-row">
+            <a class="button" th:href="@{/admin/masters/import}">Cargar maestros</a>
+            <a class="button primary" th:href="@{/admin/products/import/template}">Descargar plantilla v2.1</a>
+        </div>
     </section>
 
     <div class="notice" th:if="${message}" th:text="${message}"></div>
     <div class="form-error" th:if="${error}" th:text="${error}"></div>
 
     <section class="wizard-summary" style="margin-bottom:18px">
-        <article class="summary-card"><span>Paso 1</span><strong>Completar Excel</strong><small>Una familia puede tener muchas variantes.</small></article>
-        <article class="summary-card"><span>Paso 2</span><strong>Adjuntar imágenes</strong><small>ZIP opcional, enlazado por nombre de archivo.</small></article>
+        <article class="summary-card"><span>Paso 1</span><strong>Cargar maestros</strong><small>Empresa, marca, jerarquía, atributos y lista de precios.</small></article>
+        <article class="summary-card"><span>Paso 2</span><strong>Completar productos</strong><small>La plantilla incluye hojas de referencia con los IDs reales.</small></article>
         <article class="summary-card"><span>Paso 3</span><strong>Validar y confirmar</strong><small>Nada cambia antes de confirmar.</small></article>
     </section>
+
+    <article class="wizard-card">
+        <div class="wizard-panel-heading">
+            <div><h2>Antes de importar productos</h2><p>Descarga una plantilla nueva después de confirmar los maestros. Así las hojas Ref_Empresas, Ref_Marcas, Ref_Categorias, Ref_MarcaCategorias, Ref_ListasPrecio y Ref_Unidades contendrán los registros actuales.</p></div>
+            <a class="button" th:href="@{/admin/masters/import}">Ir a Datos maestros</a>
+        </div>
+        <div class="review-list">
+            <div class="review-item"><strong>IDs opcionales</strong><span>Cuando están vacíos, el servidor resuelve empresa, marca y categoría por nombre y jerarquía.</span></div>
+            <div class="review-item"><strong>Relación heredada</strong><span>Una marca vinculada con la categoría principal puede importar productos de sus subcategorías.</span></div>
+            <div class="review-item"><strong>Moneda fija</strong><span>Todos los precios deben estar en PEN y la lista indicada debe existir.</span></div>
+        </div>
+    </article>
 
     <form class="wizard-card" method="post" enctype="multipart/form-data" th:action="@{/admin/products/import/preview}">
         <div class="wizard-panel-heading">

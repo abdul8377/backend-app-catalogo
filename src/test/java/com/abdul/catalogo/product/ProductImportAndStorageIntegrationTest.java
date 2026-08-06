@@ -18,15 +18,19 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -37,6 +41,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @ActiveProfiles("test")
 @SpringBootTest
 class ProductImportAndStorageIntegrationTest {
+    private static final String COMPANY_ID = "10000000-0000-0000-0000-000000000001";
+    private static final String BRAND_ID = "10000000-0000-0000-0000-000000000002";
+    private static final String CATEGORY_ID = "10000000-0000-0000-0000-000000000003";
+    private static final String RELATION_ID = "10000000-0000-0000-0000-000000000004";
+    private static final String COMPANY_NAME = "Empresa Importación";
+    private static final String BRAND_NAME = "Marca Importación";
+    private static final String CATEGORY_NAME = "Importación masiva";
+
     @Autowired ProductImportService importService;
     @Autowired ProductRepository productRepository;
     @Autowired ChangeLogRepository changeRepository;
@@ -44,6 +56,40 @@ class ProductImportAndStorageIntegrationTest {
     @Autowired StorageService storageService;
     @Autowired StoredFileRepository storedFileRepository;
     @Autowired StoredFileRetentionService storedFileRetentionService;
+    @Autowired JdbcTemplate jdbc;
+
+    @BeforeEach
+    void ensureProductImportMasters() {
+        Instant now = Instant.now();
+        if (count("empresas", COMPANY_ID) == 0) {
+            jdbc.update("""
+                    INSERT INTO empresas(id, nombre, nombre_normalizado, ruc, telefono, direccion, estado,
+                        version, last_sequence, deleted, created_at, updated_at)
+                    VALUES (?, ?, 'empresa importacion', '', '', '', TRUE, 0, 0, FALSE, ?, ?)
+                    """, COMPANY_ID, COMPANY_NAME, Timestamp.from(now), Timestamp.from(now));
+        }
+        if (count("marcas", BRAND_ID) == 0) {
+            jdbc.update("""
+                    INSERT INTO marcas(id, empresa_id, nombre, nombre_normalizado, estado,
+                        version, last_sequence, deleted, created_at, updated_at)
+                    VALUES (?, ?, ?, 'marca importacion', TRUE, 0, 0, FALSE, ?, ?)
+                    """, BRAND_ID, COMPANY_ID, BRAND_NAME, Timestamp.from(now), Timestamp.from(now));
+        }
+        if (count("categorias", CATEGORY_ID) == 0) {
+            jdbc.update("""
+                    INSERT INTO categorias(id, categoria_padre_id, nombre, nombre_normalizado, descripcion, estado,
+                        version, last_sequence, deleted, created_at, updated_at)
+                    VALUES (?, NULL, ?, 'importacion masiva', '', TRUE, 0, 0, FALSE, ?, ?)
+                    """, CATEGORY_ID, CATEGORY_NAME, Timestamp.from(now), Timestamp.from(now));
+        }
+        if (count("marca_categorias", RELATION_ID) == 0) {
+            jdbc.update("""
+                    INSERT INTO marca_categorias(id, marca_id, categoria_id, estado,
+                        version, last_sequence, deleted, created_at, updated_at)
+                    VALUES (?, ?, ?, TRUE, 0, 0, FALSE, ?, ?)
+                    """, RELATION_ID, BRAND_ID, CATEGORY_ID, Timestamp.from(now), Timestamp.from(now));
+        }
+    }
 
     @Test
     void previewDoesNotPublishAndConfirmationIsIdempotent() throws Exception {
@@ -162,9 +208,9 @@ class ProductImportAndStorageIntegrationTest {
             product.createCell(0).setCellValue(code);
             product.createCell(3).setCellValue("Producto importado");
             product.createCell(4).setCellValue("Vista previa segura");
-            product.createCell(5).setCellValue("Empresa Demo");
-            product.createCell(7).setCellValue("Marca Demo");
-            product.createCell(9).setCellValue("General");
+            product.createCell(5).setCellValue(COMPANY_NAME);
+            product.createCell(7).setCellValue(BRAND_NAME);
+            product.createCell(9).setCellValue(CATEGORY_NAME);
             product.createCell(13).setCellValue("SINGLE");
             product.createCell(14).setCellValue(activeWithImage ? "ACTIVE" : "DRAFT");
 
@@ -204,6 +250,11 @@ class ProductImportAndStorageIntegrationTest {
             workbook.write(output);
             return output.toByteArray();
         }
+    }
+
+    private int count(String table, String id) {
+        Integer result = jdbc.queryForObject("SELECT COUNT(*) FROM " + table + " WHERE id = ?", Integer.class, id);
+        return result == null ? 0 : result;
     }
 
     private MockMultipartFile excel(byte[] bytes) {

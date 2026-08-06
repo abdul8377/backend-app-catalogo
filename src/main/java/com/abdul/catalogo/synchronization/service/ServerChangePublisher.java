@@ -1,5 +1,7 @@
 package com.abdul.catalogo.synchronization.service;
 
+import com.abdul.catalogo.masterdata.service.MasterDataPayloadValidator;
+import com.abdul.catalogo.masterdata.service.RelationalMasterDataService;
 import com.abdul.catalogo.synchronization.entity.ChangeLogEntity;
 import com.abdul.catalogo.synchronization.entity.SyncRecordEntity;
 import com.abdul.catalogo.synchronization.model.SyncOperation;
@@ -24,12 +26,18 @@ public class ServerChangePublisher {
 
     private final SyncRecordRepository recordRepository;
     private final ChangeLogRepository changeRepository;
+    private final RelationalMasterDataService masterDataService;
+    private final MasterDataPayloadValidator masterPayloadValidator;
     private final ObjectMapper objectMapper;
 
     public ServerChangePublisher(SyncRecordRepository recordRepository, ChangeLogRepository changeRepository,
+                                 RelationalMasterDataService masterDataService,
+                                 MasterDataPayloadValidator masterPayloadValidator,
                                  ObjectMapper objectMapper) {
         this.recordRepository = recordRepository;
         this.changeRepository = changeRepository;
+        this.masterDataService = masterDataService;
+        this.masterPayloadValidator = masterPayloadValidator;
         this.objectMapper = objectMapper;
     }
 
@@ -43,6 +51,10 @@ public class ServerChangePublisher {
     public PublishedChange publish(String entityType, String entityId, SyncOperation operation,
                                    JsonNode payload, String origin, Long expectedVersion, String conflictId) {
         String normalizedType = entityType.trim().toUpperCase();
+        boolean deleted = operation == SyncOperation.DELETE;
+        if (masterDataService.supports(normalizedType)) {
+            masterPayloadValidator.validate(normalizedType, payload, deleted);
+        }
         SyncRecordEntity record = recordRepository.findForUpdate(normalizedType, entityId)
                 .orElseGet(() -> newRecord(normalizedType, entityId));
         if (expectedVersion != null && record.getVersion() != expectedVersion) {
@@ -51,12 +63,14 @@ public class ServerChangePublisher {
         }
         long version = record.getVersion() + 1;
         String json = write(payload);
-        record.setPayloadJson(json);
+        record.setPayloadJson(masterDataService.supports(normalizedType) ? "{}" : json);
         record.setVersion(version);
-        record.setDeleted(operation == SyncOperation.DELETE);
-        record.setDeletedAt(operation == SyncOperation.DELETE ? Instant.now() : null);
+        record.setDeleted(deleted);
+        record.setDeletedAt(deleted ? Instant.now() : null);
         record.setOriginDeviceId(origin);
-        recordRepository.save(record);
+        recordRepository.saveAndFlush(record);
+
+        masterDataService.apply(normalizedType, entityId, payload, version, origin, deleted);
 
         ChangeLogEntity change = new ChangeLogEntity();
         change.setEntityType(normalizedType);
@@ -70,6 +84,7 @@ public class ServerChangePublisher {
         change = changeRepository.saveAndFlush(change);
         record.setLastSequence(change.getSequence());
         recordRepository.save(record);
+        masterDataService.updateLastSequence(normalizedType, entityId, change.getSequence());
         return new PublishedChange(version, change.getSequence());
     }
 

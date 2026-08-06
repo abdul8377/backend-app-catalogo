@@ -4,21 +4,22 @@ import com.abdul.catalogo.synchronization.dto.DeviceRegistrationRequest;
 import com.abdul.catalogo.synchronization.dto.DeviceRegistrationResponse;
 import com.abdul.catalogo.synchronization.dto.SyncEventRequest;
 import com.abdul.catalogo.synchronization.dto.SyncPushRequest;
+import com.abdul.catalogo.synchronization.model.ConflictResolution;
 import com.abdul.catalogo.synchronization.model.SyncOperation;
 import com.abdul.catalogo.synchronization.model.SyncResultStatus;
-import com.abdul.catalogo.synchronization.model.ConflictResolution;
-import com.abdul.catalogo.synchronization.repository.PairingCodeRepository;
 import com.abdul.catalogo.synchronization.repository.ChangeLogRepository;
+import com.abdul.catalogo.synchronization.repository.PairingCodeRepository;
 import com.abdul.catalogo.synchronization.service.DeviceService;
 import com.abdul.catalogo.synchronization.service.PairingCodeService;
+import com.abdul.catalogo.synchronization.service.SyncConflictService;
 import com.abdul.catalogo.synchronization.service.SyncPushService;
 import com.abdul.catalogo.synchronization.service.SyncReadService;
-import com.abdul.catalogo.synchronization.service.SyncConflictService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
@@ -52,6 +53,7 @@ class SecureSyncContractIntegrationTest {
     @Autowired SyncReadService readService;
     @Autowired ChangeLogRepository changeLogRepository;
     @Autowired SyncConflictService conflictService;
+    @Autowired JdbcTemplate jdbc;
 
     @Test
     void pairingCodeIsRequiredSingleUseAndRevocationInvalidatesToken() throws Exception {
@@ -70,7 +72,8 @@ class SecureSyncContractIntegrationTest {
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.bootstrapStatus").value("REQUIRED"))
                 .andReturn().getResponse().getContentAsString();
         var registered = objectMapper.readTree(registration);
-        String deviceId = registered.get("deviceId").asText(); String token = registered.get("token").asText();
+        String deviceId = registered.get("deviceId").asText();
+        String token = registered.get("token").asText();
 
         mockMvc.perform(post("/api/v1/devices/register").contentType(MediaType.APPLICATION_JSON)
                         .content(registrationJson(pairing.pairingCode())))
@@ -86,7 +89,8 @@ class SecureSyncContractIntegrationTest {
     void expiredPairingCodeAndUndeliveredAckAreRejected() {
         var pairing = pairingCodeService.create("admin-test");
         var entity = pairingCodeRepository.findById(pairing.pairingId()).orElseThrow();
-        entity.setExpiresAt(Instant.now().minusSeconds(1)); pairingCodeRepository.saveAndFlush(entity);
+        entity.setExpiresAt(Instant.now().minusSeconds(1));
+        pairingCodeRepository.saveAndFlush(entity);
         assertThatThrownBy(() -> deviceService.register(new DeviceRegistrationRequest("Tablet", "android",
                 pairing.pairingCode(), "1.0", "1.0"))).hasMessageContaining("expiró");
 
@@ -100,24 +104,34 @@ class SecureSyncContractIntegrationTest {
 
     @Test
     void onlyOneConcurrentWriteWithTheSameBaseVersionIsAccepted() throws Exception {
-        DeviceRegistrationResponse first = register("concurrent-a"); DeviceRegistrationResponse second = register("concurrent-b");
+        DeviceRegistrationResponse first = register("concurrent-a");
+        DeviceRegistrationResponse second = register("concurrent-b");
         String entityId = UUID.randomUUID().toString();
         SyncEventRequest a = event(UUID.randomUUID().toString(), entityId, "Empresa A");
         SyncEventRequest b = event(UUID.randomUUID().toString(), entityId, "Empresa B");
         var pool = Executors.newFixedThreadPool(2);
         try {
-            Callable<SyncResultStatus> taskA = () -> pushService.push(first.deviceId(), new SyncPushRequest(first.deviceId(), "1.0", List.of(a))).results().get(0).status();
-            Callable<SyncResultStatus> taskB = () -> pushService.push(second.deviceId(), new SyncPushRequest(second.deviceId(), "1.0", List.of(b))).results().get(0).status();
+            Callable<SyncResultStatus> taskA = () -> pushService.push(first.deviceId(),
+                    new SyncPushRequest(first.deviceId(), "1.0", List.of(a))).results().get(0).status();
+            Callable<SyncResultStatus> taskB = () -> pushService.push(second.deviceId(),
+                    new SyncPushRequest(second.deviceId(), "1.0", List.of(b))).results().get(0).status();
             var results = pool.invokeAll(List.of(taskA, taskB)).stream().map(future -> {
-                try { return future.get(); } catch (Exception exception) { throw new RuntimeException(exception); }
+                try {
+                    return future.get();
+                } catch (Exception exception) {
+                    throw new RuntimeException(exception);
+                }
             }).toList();
             assertThat(results).containsExactlyInAnyOrder(SyncResultStatus.ACCEPTED, SyncResultStatus.CONFLICT);
-        } finally { pool.shutdownNow(); }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test
     void eventIdCannotBeReusedWithDifferentContent() {
-        DeviceRegistrationResponse device = register("event-reuse"); String eventId = UUID.randomUUID().toString();
+        DeviceRegistrationResponse device = register("event-reuse");
+        String eventId = UUID.randomUUID().toString();
         var first = pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0",
                 List.of(event(eventId, UUID.randomUUID().toString(), "Original"))));
         var second = pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0",
@@ -132,25 +146,57 @@ class SecureSyncContractIntegrationTest {
         DeviceRegistrationResponse device = register("pagination");
         long after = changeLogRepository.findTopByOrderBySequenceDesc() == null ? 0
                 : changeLogRepository.findTopByOrderBySequenceDesc().getSequence();
-        String companyId = UUID.randomUUID().toString(), brandId = UUID.randomUUID().toString(), categoryId = UUID.randomUUID().toString();
-        SyncEventRequest brand = event(UUID.randomUUID().toString(), "BRAND", brandId, 0, SyncOperation.UPSERT, "Marca");
-        SyncEventRequest category = event(UUID.randomUUID().toString(), "CATEGORY", categoryId, 0, SyncOperation.UPSERT, "Categoría");
-        SyncEventRequest company = event(UUID.randomUUID().toString(), "COMPANY", companyId, 0, SyncOperation.UPSERT, "Empresa");
-        pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0", List.of(brand, category, company)));
-        SyncEventRequest tombstone = event(UUID.randomUUID().toString(), "CATEGORY", categoryId, 1, SyncOperation.DELETE, "Categoría");
+        String companyId = UUID.randomUUID().toString();
+        String brandId = UUID.randomUUID().toString();
+        String categoryId = UUID.randomUUID().toString();
+        SyncEventRequest company = event(UUID.randomUUID().toString(), "COMPANY", companyId, 0,
+                SyncOperation.UPSERT, Map.of("id", companyId, "name", "Empresa"));
+        SyncEventRequest category = event(UUID.randomUUID().toString(), "CATEGORY", categoryId, 0,
+                SyncOperation.UPSERT, Map.of("id", categoryId, "name", "Categoría"));
+        SyncEventRequest brand = event(UUID.randomUUID().toString(), "BRAND", brandId, 0,
+                SyncOperation.UPSERT, Map.of("id", brandId, "company_id", companyId, "name", "Marca"));
+        var created = pushService.push(device.deviceId(),
+                new SyncPushRequest(device.deviceId(), "1.0", List.of(company, category, brand)));
+        assertThat(created.results()).extracting(result -> result.status())
+                .containsOnly(SyncResultStatus.ACCEPTED);
+        SyncEventRequest tombstone = event(UUID.randomUUID().toString(), "CATEGORY", categoryId, 1,
+                SyncOperation.DELETE, Map.of("id", categoryId, "name", "Categoría"));
         pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0", List.of(tombstone)));
 
         var page1 = readService.pull(device.deviceId(), after, 2);
-        assertThat(page1.hasMore()).isTrue(); assertThat(page1.changes()).hasSize(2);
+        assertThat(page1.hasMore()).isTrue();
+        assertThat(page1.changes()).hasSize(2);
         readService.acknowledge(device.deviceId(), page1.nextCursor());
         var page2 = readService.pull(device.deviceId(), page1.nextCursor(), 2);
-        assertThat(page2.hasMore()).isFalse(); assertThat(page2.changes()).hasSize(2);
+        assertThat(page2.hasMore()).isFalse();
+        assertThat(page2.changes()).hasSize(2);
 
         var bootstrap = readService.bootstrap(0, 300, null);
         var ids = bootstrap.records().stream().map(record -> record.entityId()).toList();
         assertThat(ids.indexOf(companyId)).isLessThan(ids.indexOf(brandId));
         assertThat(ids.indexOf(brandId)).isLessThan(ids.indexOf(categoryId));
-        assertThat(bootstrap.records().stream().filter(record -> record.entityId().equals(categoryId)).findFirst().orElseThrow().deleted()).isTrue();
+        assertThat(bootstrap.records().stream().filter(record -> record.entityId().equals(categoryId))
+                .findFirst().orElseThrow().deleted()).isTrue();
+    }
+
+    @Test
+    void relationalMastersKeepBusinessDataOutsideSyncRecords() {
+        DeviceRegistrationResponse device = register("relational-master");
+        String entityId = UUID.randomUUID().toString();
+        var result = pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0",
+                List.of(event(UUID.randomUUID().toString(), "COMPANY", entityId, 0,
+                        SyncOperation.UPSERT, Map.of("id", entityId, "name", "Empresa relacional")))))
+                .results().get(0);
+
+        assertThat(result.status()).isEqualTo(SyncResultStatus.ACCEPTED);
+        assertThat(jdbc.queryForObject("SELECT nombre FROM empresas WHERE id = ?", String.class, entityId))
+                .isEqualTo("Empresa relacional");
+        assertThat(jdbc.queryForObject(
+                "SELECT payload_json FROM sync_records WHERE entity_type = 'COMPANY' AND entity_id = ?",
+                String.class, entityId)).isEqualTo("{}");
+        assertThat(readService.bootstrap(0, 300, null).records())
+                .anyMatch(record -> record.entityId().equals(entityId)
+                        && record.payload().path("nombre").asText().equals("Empresa relacional"));
     }
 
     @Test
@@ -158,14 +204,16 @@ class SecureSyncContractIntegrationTest {
         DeviceRegistrationResponse device = register("snapshot");
         String entityId = UUID.randomUUID().toString();
         var created = pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0",
-                List.of(event(UUID.randomUUID().toString(), "COMPANY", entityId, 0, SyncOperation.UPSERT, "Inicial"))))
+                List.of(event(UUID.randomUUID().toString(), "COMPANY", entityId, 0,
+                        SyncOperation.UPSERT, "Inicial"))))
                 .results().get(0);
         long snapshotCursor = created.sequence();
         assertThat(readService.bootstrap(0, 300, snapshotCursor).records())
                 .anyMatch(record -> record.entityId().equals(entityId) && record.version() == 1);
 
         pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0",
-                List.of(event(UUID.randomUUID().toString(), "COMPANY", entityId, 1, SyncOperation.UPSERT, "Modificada"))));
+                List.of(event(UUID.randomUUID().toString(), "COMPANY", entityId, 1,
+                        SyncOperation.UPSERT, "Modificada"))));
 
         assertThat(readService.bootstrap(0, 300, snapshotCursor).records())
                 .anyMatch(record -> record.entityId().equals(entityId) && record.version() == 1
@@ -179,14 +227,15 @@ class SecureSyncContractIntegrationTest {
         DeviceRegistrationResponse device = register("conflict-correlation");
         String entityId = UUID.randomUUID().toString();
         var accepted = pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0",
-                List.of(event(UUID.randomUUID().toString(), "COMPANY", entityId, 0, SyncOperation.UPSERT, "Servidor"))))
+                List.of(event(UUID.randomUUID().toString(), "COMPANY", entityId, 0,
+                        SyncOperation.UPSERT, "Servidor"))))
                 .results().get(0);
         String eventId = UUID.randomUUID().toString();
         SyncEventRequest stale = event(eventId, "COMPANY", entityId, 0, SyncOperation.UPSERT, "Tablet");
-        var conflict = pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0", List.of(stale)))
-                .results().get(0);
-        var replay = pushService.push(device.deviceId(), new SyncPushRequest(device.deviceId(), "1.0", List.of(stale)))
-                .results().get(0);
+        var conflict = pushService.push(device.deviceId(),
+                new SyncPushRequest(device.deviceId(), "1.0", List.of(stale))).results().get(0);
+        var replay = pushService.push(device.deviceId(),
+                new SyncPushRequest(device.deviceId(), "1.0", List.of(stale))).results().get(0);
 
         assertThat(conflict.conflictId()).isNotBlank();
         assertThat(replay.conflictId()).isEqualTo(conflict.conflictId());
@@ -213,13 +262,14 @@ class SecureSyncContractIntegrationTest {
 
         assertThat(response.results()).extracting(result -> result.status())
                 .containsExactly(SyncResultStatus.REJECTED, SyncResultStatus.REJECTED);
-        assertThat(response.results().get(0).message()).contains("no está habilitado");
+        assertThat(response.results().get(0).message()).contains("no está habilitada");
         assertThat(response.results().get(1).message()).contains("payloadVersion");
     }
 
     private DeviceRegistrationResponse register(String suffix) {
         var pairing = pairingCodeService.create("test");
-        return deviceService.register(new DeviceRegistrationRequest("Tablet-" + suffix, "android", pairing.pairingCode(), "1.0.0", "1.0"));
+        return deviceService.register(new DeviceRegistrationRequest("Tablet-" + suffix, "android",
+                pairing.pairingCode(), "1.0.0", "1.0"));
     }
 
     private SyncEventRequest event(String eventId, String entityId, String name) {
@@ -228,12 +278,17 @@ class SecureSyncContractIntegrationTest {
 
     private SyncEventRequest event(String eventId, String type, String entityId, long baseVersion,
                                    SyncOperation operation, String name) {
+        return event(eventId, type, entityId, baseVersion, operation, Map.of("id", entityId, "name", name));
+    }
+
+    private SyncEventRequest event(String eventId, String type, String entityId, long baseVersion,
+                                   SyncOperation operation, Map<String, ?> payload) {
         return new SyncEventRequest(eventId, type, entityId, operation, baseVersion, 1, "1.0", null,
-                Instant.now(), objectMapper.valueToTree(Map.of("id", entityId, "name", name)));
+                Instant.now(), objectMapper.valueToTree(payload));
     }
 
     private String registrationJson(String code) throws Exception {
-        return objectMapper.writeValueAsString(Map.of("name", "Tablet segura", "platform", "android", "pairingCode", code,
-                "appVersion", "1.0.0", "apiContractVersion", "1.0"));
+        return objectMapper.writeValueAsString(Map.of("name", "Tablet segura", "platform", "android",
+                "pairingCode", code, "appVersion", "1.0.0", "apiContractVersion", "1.0"));
     }
 }
