@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Importar datos maestros · App Catálogo</title>
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+    <link rel="stylesheet" th:href="@{/css/admin-v2.css}">
+    <link rel="stylesheet" th:href="@{/css/product-wizard.css}">
+</head>
+<body>
+<header class="topbar">
+    <div class="brand-lockup"><span class="brand-mark">AC</span><div class="brand-copy"><strong>App Catálogo</strong><span>Administración local</span></div></div>
+    <nav>
+        <a th:href="@{/admin/products}">Productos</a>
+        <a class="active" th:href="@{/admin/masters/import}">Datos maestros</a>
+        <a th:href="@{/admin/products/import}">Importar productos</a>
+        <a th:href="@{/admin/devices}">Dispositivos</a>
+    </nav>
+</header>
+<main class="container">
+    <section class="catalog-hero">
+        <div>
+            <p class="eyebrow">Estructura previa del catálogo</p>
+            <h1>Importar datos maestros</h1>
+            <p class="hero-copy">Registra empresas, marcas, categorías jerárquicas, relaciones, unidades, atributos técnicos, opciones y listas de precios. La confirmación publica los mismos eventos que recibe la tablet.</p>
+        </div>
+        <a class="button primary" th:href="@{/admin/masters/import/template}">Descargar plantilla</a>
+    </section>
+
+    <div class="notice" th:if="${message}" th:text="${message}"></div>
+    <div class="form-error" th:if="${error}" th:text="${error}"></div>
+
+    <section class="wizard-summary" style="margin-bottom:18px">
+        <article class="summary-card"><span>Paso 1</span><strong>Completar maestros</strong><small>Los IDs son opcionales y se resuelven por claves naturales.</small></article>
+        <article class="summary-card"><span>Paso 2</span><strong>Validar referencias</strong><small>La vista previa no modifica el catálogo.</small></article>
+        <article class="summary-card"><span>Paso 3</span><strong>Confirmar y sincronizar</strong><small>Cada registro queda disponible para la tablet.</small></article>
+    </section>
+
+    <form class="wizard-card" method="post" enctype="multipart/form-data" th:action="@{/admin/masters/import/preview}">
+        <div class="wizard-panel-heading">
+            <div><h2>Nueva carga de maestros</h2><p>Usa la plantilla descargada. No se permiten macros ni fórmulas.</p></div>
+        </div>
+        <div class="wizard-grid">
+            <div class="wizard-field field-span-12">
+                <label for="file">Plantilla Excel *</label>
+                <input id="file" type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                <small>Hojas: Empresas, Marcas, Categorias, MarcaCategorias, Unidades, Atributos, Opciones, AtributoUnidades y ListasPrecio.</small>
+            </div>
+        </div>
+        <div class="form-actions"><button class="button primary" type="submit">Validar y generar vista previa</button></div>
+    </form>
+
+    <article class="wizard-card">
+        <h2>Reglas importantes</h2>
+        <div class="review-list">
+            <div class="review-item"><strong>Jerarquía</strong><span>Escribe primero la categoría padre y usa rutas como Línea Moto &gt; Pernos para moto.</span></div>
+            <div class="review-item"><strong>Marca–categoría</strong><span>Relaciona la marca con la categoría principal; sus descendientes heredan la relación.</span></div>
+            <div class="review-item"><strong>Precios</strong><span>Todas las listas se guardan en PEN. El IGV predeterminado es 18%.</span></div>
+            <div class="review-item"><strong>Repetición segura</strong><span>Una segunda carga reutiliza IDs existentes y actualiza en lugar de duplicar.</span></div>
+        </div>
+    </article>
+
+    <section th:if="${preview}" class="import-result">
+        <div class="import-summary">
+            <div class="card summary-item"><span>Total</span><strong th:text="${preview.totalRows}">0</strong></div>
+            <div class="card summary-item"><span>Válidas</span><strong th:text="${preview.validRows}">0</strong></div>
+            <div class="card summary-item"><span>Advertencias</span><strong th:text="${preview.warningRows}">0</strong></div>
+            <div class="card summary-item"><span>Errores</span><strong th:text="${preview.errorRows}">0</strong></div>
+        </div>
+        <section class="page-heading">
+            <div><h2 th:text="|Vista previa · ${preview.status}|">Vista previa</h2><p class="mono" th:text="${preview.id}"></p></div>
+            <form method="post" th:if="${preview.errorRows == 0 and preview.status != 'CONFIRMED'}" th:action="@{/admin/masters/import/{id}/confirm(id=${preview.id})}">
+                <button class="button primary" type="submit">Confirmar maestros</button>
+            </form>
+        </section>
+        <section class="card table-card">
+            <table>
+                <thead><tr><th>Hoja / fila</th><th>Entidad</th><th>ID</th><th>Acción</th><th>Estado</th><th>Versión / secuencia</th><th>Mensajes</th></tr></thead>
+                <tbody><tr th:each="row : ${preview.rows}">
+                    <td><strong th:text="${row.sheet}"></strong><small th:text="|Fila ${row.rowNumber}|"></small></td>
+                    <td th:text="${row.entityType}"></td>
+                    <td class="mono" th:text="${row.entityId}"></td>
+                    <td th:text="${row.action}"></td>
+                    <td><span class="badge" th:text="${row.status}"></span></td>
+                    <td><span th:text="${row.resultVersion}"></span><small th:text="${row.resultSequence}"></small></td>
+                    <td><ul class="messages"><li th:each="message : ${row.messages}" th:text="${message}"></li></ul></td>
+                </tr></tbody>
+            </table>
+        </section>
+    </section>
+</main>
+</body>
+</html>
