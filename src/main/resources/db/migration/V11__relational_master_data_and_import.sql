@@ -51,9 +51,6 @@ CREATE TABLE categorias (
     INDEX idx_categorias_padre (categoria_padre_id, estado, deleted)
 );
 
-CREATE UNIQUE INDEX uq_categorias_raiz_nombre
-    ON categorias ((CASE WHEN categoria_padre_id IS NULL THEN nombre_normalizado ELSE NULL END));
-
 CREATE TABLE marca_categorias (
     id CHAR(36) PRIMARY KEY,
     marca_id CHAR(36) NOT NULL,
