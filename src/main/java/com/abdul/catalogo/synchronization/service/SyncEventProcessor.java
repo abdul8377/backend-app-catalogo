@@ -1,5 +1,6 @@
 package com.abdul.catalogo.synchronization.service;
 
+import com.abdul.catalogo.masterdata.service.RelationalMasterDataService;
 import com.abdul.catalogo.product.service.ProductProjectionService;
 import com.abdul.catalogo.shared.config.ContractProperties;
 import com.abdul.catalogo.shared.crypto.Digests;
@@ -35,19 +36,22 @@ public class SyncEventProcessor {
     private final ChangeLogRepository changeRepository;
     private final SyncConflictRepository conflictRepository;
     private final ProductProjectionService productProjectionService;
+    private final RelationalMasterDataService masterDataService;
     private final ObjectMapper objectMapper;
     private final ContractProperties contractProperties;
 
     public SyncEventProcessor(SyncEntityCatalog entityCatalog, SyncRecordRepository recordRepository,
                               ProcessedEventRepository eventRepository, ChangeLogRepository changeRepository,
                               SyncConflictRepository conflictRepository, ProductProjectionService productProjectionService,
-                              ObjectMapper objectMapper, ContractProperties contractProperties) {
+                              RelationalMasterDataService masterDataService, ObjectMapper objectMapper,
+                              ContractProperties contractProperties) {
         this.entityCatalog = entityCatalog;
         this.recordRepository = recordRepository;
         this.eventRepository = eventRepository;
         this.changeRepository = changeRepository;
         this.conflictRepository = conflictRepository;
         this.productProjectionService = productProjectionService;
+        this.masterDataService = masterDataService;
         this.objectMapper = objectMapper;
         this.contractProperties = contractProperties;
     }
@@ -124,14 +128,16 @@ public class SyncEventProcessor {
         }
         long nextVersion = currentVersion + 1;
         boolean deleted = event.operation() == SyncOperation.DELETE;
-        record.setPayloadJson(payloadJson);
+        record.setPayloadJson(masterDataService.supports(entityType) ? "{}" : payloadJson);
         record.setVersion(nextVersion);
         record.setDeleted(deleted);
         record.setDeletedAt(deleted ? Instant.now() : null);
         record.setOriginDeviceId(deviceId);
         recordRepository.saveAndFlush(record);
 
-        if (entityType.equals("PRODUCT")) {
+        if (masterDataService.supports(entityType)) {
+            masterDataService.apply(entityType, event.entityId(), event.payload(), nextVersion, deviceId, deleted);
+        } else if (entityType.equals("PRODUCT")) {
             productProjectionService.apply(event.entityId(), event.payload(), nextVersion, deviceId, deleted);
         }
 
@@ -147,6 +153,7 @@ public class SyncEventProcessor {
         change = changeRepository.saveAndFlush(change);
         record.setLastSequence(change.getSequence());
         recordRepository.save(record);
+        masterDataService.updateLastSequence(entityType, event.entityId(), change.getSequence());
 
         saveProcessed(event, deviceId, requestChecksum, SyncResultStatus.ACCEPTED,
                 nextVersion, change.getSequence(), null, null);
@@ -154,12 +161,6 @@ public class SyncEventProcessor {
                 nextVersion, change.getSequence(), null, null);
     }
 
-    /**
-     * La tablet debe poder respaldar productos creados con versiones anteriores
-     * aunque todavía no tengan imagen o precio. Se valida toda la estructura,
-     * pero las reglas estrictas de publicación se reservan al formulario web y
-     * al importador. El estado original se conserva al persistir el payload.
-     */
     private void validateProductBackup(String productId, JsonNode payload) {
         if (!(payload instanceof ObjectNode product)) {
             productProjectionService.validateUpsert(productId, payload);
@@ -178,7 +179,9 @@ public class SyncEventProcessor {
         conflict.setEntityId(event.entityId());
         conflict.setServerVersion(currentVersion);
         conflict.setClientBaseVersion(event.baseVersion());
-        conflict.setServerPayload(record == null ? "{}" : record.getPayloadJson());
+        conflict.setServerPayload(masterDataService.supports(entityType)
+                ? masterDataService.currentPayload(entityType, event.entityId()).orElse("{}")
+                : record == null ? "{}" : record.getPayloadJson());
         conflict.setClientPayload(clientPayload);
         conflict.setOriginDeviceId(deviceId);
         conflict.setStatus(ConflictStatus.PENDING);
