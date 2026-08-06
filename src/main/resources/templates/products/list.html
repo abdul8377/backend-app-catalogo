@@ -19,7 +19,8 @@
     </div>
     <nav>
         <a class="active" th:href="@{/admin/products}">Productos</a>
-        <a th:href="@{/admin/products/import}">Importar Excel</a>
+        <a th:href="@{/admin/masters/import}">Datos maestros</a>
+        <a th:href="@{/admin/products/import}">Importar productos</a>
         <a th:href="@{/admin/devices}">Dispositivos</a>
         <a th:href="@{/api/v1/sync/status}">Sincronización</a>
     </nav>
@@ -33,7 +34,8 @@
             <p class="hero-copy">Administra familias, variantes, presentaciones, precios e imágenes. Cada cambio queda listo para sincronizar con la tablet.</p>
         </div>
         <div class="button-row hero-actions">
-            <a class="button" th:href="@{/admin/products/import}">Importar Excel</a>
+            <a class="button" th:href="@{/admin/masters/import}">Cargar maestros</a>
+            <a class="button" th:href="@{/admin/products/import}">Importar productos</a>
             <a class="button primary" th:href="@{/admin/products/new}">+ Nuevo producto</a>
         </div>
     </section>
@@ -78,7 +80,7 @@
                          th:alt="|Imagen de ${product.name}|"
                          loading="lazy">
                 </div>
-                <div class="product-image-placeholder" th:if="${product.imageUrl == null}">
+                <div class="product-image-frame product-image-placeholder" th:if="${product.imageUrl == null}">
                     <span aria-hidden="true">▧</span>
                     <small>Sin imagen</small>
                 </div>
@@ -148,9 +150,10 @@
         <div class="empty-illustration" aria-hidden="true">▦</div>
         <h2>No encontramos productos</h2>
         <p th:if="${query != null and !query.isBlank()}">Prueba otra búsqueda o limpia el filtro actual.</p>
-        <p th:unless="${query != null and !query.isBlank()}">Sincroniza la tablet, importa un Excel o registra el primer producto desde la PC.</p>
+        <p th:unless="${query != null and !query.isBlank()}">Sincroniza la tablet, carga los maestros, importa un Excel o registra el primer producto desde la PC.</p>
         <div class="button-row">
-            <a class="button" th:href="@{/admin/products/import}">Importar Excel</a>
+            <a class="button" th:href="@{/admin/masters/import}">Cargar maestros</a>
+            <a class="button" th:href="@{/admin/products/import}">Importar productos</a>
             <a class="button primary" th:href="@{/admin/products/new}">Nuevo producto</a>
         </div>
     </section>
