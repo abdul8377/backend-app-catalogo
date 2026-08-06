@@ -1,6 +1,8 @@
 package com.abdul.catalogo.product.importing.service;
 
+import com.abdul.catalogo.masterdata.service.BrandCategoryHierarchyService;
 import com.abdul.catalogo.masterdata.service.RelationalMasterDataService;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ArrayNode;
@@ -13,9 +15,15 @@ import java.util.Locale;
 @Component
 public class ProductMasterDataResolver {
     private final RelationalMasterDataService masters;
+    private final BrandCategoryHierarchyService hierarchy;
+    private final JdbcTemplate jdbc;
 
-    public ProductMasterDataResolver(RelationalMasterDataService masters) {
+    public ProductMasterDataResolver(RelationalMasterDataService masters,
+                                     BrandCategoryHierarchyService hierarchy,
+                                     JdbcTemplate jdbc) {
         this.masters = masters;
+        this.hierarchy = hierarchy;
+        this.jdbc = jdbc;
     }
 
     public ProductImportCandidate resolve(ProductImportCandidate candidate) {
@@ -29,6 +37,8 @@ public class ProductMasterDataResolver {
             companyId = masters.findCompanyId(companyName).orElse("");
             if (companyId.isBlank()) errors.add("No existe la empresa " + companyName + " en los datos maestros.");
             else aggregate.put("companyId", companyId);
+        } else if (!matchesCompany(companyId, companyName)) {
+            errors.add("EmpresaId no existe o no corresponde a " + companyName + ".");
         }
 
         String brandName = aggregate.path("brand").asText().trim();
@@ -37,6 +47,8 @@ public class ProductMasterDataResolver {
             brandId = masters.findBrandId(companyId, brandName).orElse("");
             if (brandId.isBlank()) errors.add("No existe la marca " + brandName + " dentro de " + companyName + ".");
             else aggregate.put("brandId", brandId);
+        } else if (!brandId.isBlank() && !matchesBrand(brandId, companyId, brandName)) {
+            errors.add("MarcaId no existe, no corresponde a " + brandName + " o pertenece a otra empresa.");
         }
 
         String categoryName = aggregate.path("category").asText().trim();
@@ -45,6 +57,8 @@ public class ProductMasterDataResolver {
             categoryId = masters.findRootCategoryId(categoryName).orElse("");
             if (categoryId.isBlank()) errors.add("No existe la categoría principal " + categoryName + ".");
             else aggregate.put("categoryId", categoryId);
+        } else if (!matchesCategory(categoryId, null, categoryName)) {
+            errors.add("CategoriaId no existe o no corresponde a la categoría principal " + categoryName + ".");
         }
 
         String subcategoryName = aggregate.path("subcategory").asText().trim();
@@ -56,11 +70,13 @@ public class ProductMasterDataResolver {
             } else {
                 aggregate.put("subcategoryId", subcategoryId);
             }
+        } else if (!subcategoryId.isBlank() && !matchesCategory(subcategoryId, categoryId, subcategoryName)) {
+            errors.add("SubcategoriaId no existe o no pertenece a " + categoryName + ".");
         }
 
         String effectiveCategoryId = subcategoryId.isBlank() ? categoryId : subcategoryId;
         if (!brandId.isBlank() && !effectiveCategoryId.isBlank()
-                && !masters.brandAppliesToCategory(brandId, effectiveCategoryId)) {
+                && !hierarchy.brandAppliesToCategory(brandId, effectiveCategoryId)) {
             errors.add("La marca " + brandName + " no está relacionada con "
                     + (subcategoryName.isBlank() ? categoryName : categoryName + " > " + subcategoryName)
                     + " ni con una categoría antecesora.");
@@ -90,12 +106,50 @@ public class ProductMasterDataResolver {
                 if (!(raw instanceof ObjectNode list)) continue;
                 String name = list.path("name").asText("General").trim();
                 String id = masters.findPriceListId(name).orElse("");
-                if (!id.isBlank()) list.put("id", id);
+                if (id.isBlank()) {
+                    errors.add("No existe la lista de precios " + name + ".");
+                } else {
+                    list.put("id", id);
+                }
                 list.put("currency", "PEN");
             }
         }
 
         return new ProductImportCandidate(candidate.sourceRow(), candidate.familyCode(), candidate.productId(),
                 candidate.expectedVersion(), aggregate, List.copyOf(warnings), List.copyOf(errors));
+    }
+
+    private boolean matchesCompany(String id, String name) {
+        Integer count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM empresas
+                WHERE id = ? AND nombre_normalizado = ? AND deleted = FALSE
+                """, Integer.class, id, masters.normalize(name));
+        return count != null && count == 1;
+    }
+
+    private boolean matchesBrand(String id, String companyId, String name) {
+        Integer count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM marcas
+                WHERE id = ? AND empresa_id = ? AND nombre_normalizado = ? AND deleted = FALSE
+                """, Integer.class, id, companyId, masters.normalize(name));
+        return count != null && count == 1;
+    }
+
+    private boolean matchesCategory(String id, String parentId, String name) {
+        Integer count;
+        if (parentId == null || parentId.isBlank()) {
+            count = jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM categorias
+                    WHERE id = ? AND categoria_padre_id IS NULL
+                      AND nombre_normalizado = ? AND deleted = FALSE
+                    """, Integer.class, id, masters.normalize(name));
+        } else {
+            count = jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM categorias
+                    WHERE id = ? AND categoria_padre_id = ?
+                      AND nombre_normalizado = ? AND deleted = FALSE
+                    """, Integer.class, id, parentId, masters.normalize(name));
+        }
+        return count != null && count == 1;
     }
 }
