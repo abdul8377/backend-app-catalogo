@@ -231,23 +231,22 @@ CREATE TABLE master_import_rows (
 CREATE OR REPLACE VIEW sync_master_payloads AS
 SELECT 'COMPANY' entity_type, id entity_id,
        CAST(JSON_OBJECT('id', id, 'nombre', nombre, 'ruc', ruc, 'telefono', telefono,
-            'direccion', direccion, 'estado', estado, 'actualizado_en', DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ')) AS CHAR) payload_json
+            'direccion', direccion, 'estado', estado, 'actualizado_en', CAST(updated_at AS CHAR)) AS CHAR) payload_json
 FROM empresas
 UNION ALL
 SELECT 'BRAND', id,
        CAST(JSON_OBJECT('id', id, 'empresa_id', empresa_id, 'nombre', nombre, 'estado', estado,
-            'actualizado_en', DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ')) AS CHAR)
+            'actualizado_en', CAST(updated_at AS CHAR)) AS CHAR)
 FROM marcas
 UNION ALL
 SELECT 'CATEGORY', id,
        CAST(JSON_OBJECT('id', id, 'categoria_padre_id', categoria_padre_id, 'nombre', nombre,
-            'descripcion', descripcion, 'estado', estado,
-            'actualizado_en', DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ')) AS CHAR)
+            'descripcion', descripcion, 'estado', estado, 'actualizado_en', CAST(updated_at AS CHAR)) AS CHAR)
 FROM categorias
 UNION ALL
 SELECT 'BRAND_CATEGORY', id,
        CAST(JSON_OBJECT('id', id, 'marca_id', marca_id, 'categoria_id', categoria_id,
-            'estado', estado, 'actualizado_en', DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ')) AS CHAR)
+            'estado', estado, 'actualizado_en', CAST(updated_at AS CHAR)) AS CHAR)
 FROM marca_categorias
 UNION ALL
 SELECT 'MEASUREMENT_UNIT', id,
@@ -263,7 +262,7 @@ SELECT 'CATEGORY_ATTRIBUTE', id,
             'longitud_maxima', longitud_maxima, 'ejemplo', ejemplo, 'minimo', minimo, 'maximo', maximo,
             'decimales', decimales, 'magnitud', magnitud, 'maximo_selecciones', maximo_selecciones,
             'etiqueta_verdadero', etiqueta_verdadero, 'etiqueta_falso', etiqueta_falso,
-            'orden', orden, 'estado', estado, 'actualizado_en', DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ')) AS CHAR)
+            'orden', orden, 'estado', estado, 'actualizado_en', CAST(updated_at AS CHAR)) AS CHAR)
 FROM categoria_atributos
 UNION ALL
 SELECT 'CATEGORY_ATTRIBUTE_OPTION', id,
@@ -284,8 +283,7 @@ FROM atributos_def
 UNION ALL
 SELECT 'PRICE_LIST', id,
        CAST(JSON_OBJECT('id', id, 'nombre', nombre, 'moneda', moneda, 'incluye_igv', incluye_igv,
-            'igv_porcentaje', igv_porcentaje, 'estado', estado,
-            'actualizado_en', DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ')) AS CHAR)
+            'igv_porcentaje', igv_porcentaje, 'estado', estado, 'actualizado_en', CAST(updated_at AS CHAR)) AS CHAR)
 FROM listas_precios;
 
 INSERT INTO listas_precios(
