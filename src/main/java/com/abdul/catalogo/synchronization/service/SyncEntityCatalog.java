@@ -23,7 +23,7 @@ public class SyncEntityCatalog {
         String normalized = entityType == null ? "" : entityType.trim().toUpperCase(Locale.ROOT);
         if (!SUPPORTED.contains(normalized)) {
             throw new BusinessRuleException("UNSUPPORTED_ENTITY_TYPE",
-                    "La entidad " + normalized + " no forma parte del contrato de sincronización.");
+                    "La entidad " + normalized + " no está habilitada en el contrato de sincronización.");
         }
         return normalized;
     }
