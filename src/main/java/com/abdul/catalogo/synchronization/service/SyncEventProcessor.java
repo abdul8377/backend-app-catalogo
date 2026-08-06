@@ -1,5 +1,6 @@
 package com.abdul.catalogo.synchronization.service;
 
+import com.abdul.catalogo.masterdata.service.MasterDataPayloadValidator;
 import com.abdul.catalogo.masterdata.service.RelationalMasterDataService;
 import com.abdul.catalogo.product.service.ProductProjectionService;
 import com.abdul.catalogo.shared.config.ContractProperties;
@@ -37,14 +38,16 @@ public class SyncEventProcessor {
     private final SyncConflictRepository conflictRepository;
     private final ProductProjectionService productProjectionService;
     private final RelationalMasterDataService masterDataService;
+    private final MasterDataPayloadValidator masterPayloadValidator;
     private final ObjectMapper objectMapper;
     private final ContractProperties contractProperties;
 
     public SyncEventProcessor(SyncEntityCatalog entityCatalog, SyncRecordRepository recordRepository,
                               ProcessedEventRepository eventRepository, ChangeLogRepository changeRepository,
                               SyncConflictRepository conflictRepository, ProductProjectionService productProjectionService,
-                              RelationalMasterDataService masterDataService, ObjectMapper objectMapper,
-                              ContractProperties contractProperties) {
+                              RelationalMasterDataService masterDataService,
+                              MasterDataPayloadValidator masterPayloadValidator,
+                              ObjectMapper objectMapper, ContractProperties contractProperties) {
         this.entityCatalog = entityCatalog;
         this.recordRepository = recordRepository;
         this.eventRepository = eventRepository;
@@ -52,6 +55,7 @@ public class SyncEventProcessor {
         this.conflictRepository = conflictRepository;
         this.productProjectionService = productProjectionService;
         this.masterDataService = masterDataService;
+        this.masterPayloadValidator = masterPayloadValidator;
         this.objectMapper = objectMapper;
         this.contractProperties = contractProperties;
     }
@@ -98,6 +102,9 @@ public class SyncEventProcessor {
             }
             if (event.checksum() != null && !event.checksum().equalsIgnoreCase(Digests.sha256(payloadJson))) {
                 throw new BusinessRuleException("PAYLOAD_CHECKSUM_MISMATCH", "El checksum declarado no corresponde al payload.");
+            }
+            if (masterDataService.supports(entityType)) {
+                masterPayloadValidator.validate(entityType, event.payload(), event.operation() == SyncOperation.DELETE);
             }
             if (entityType.equals("PRODUCT") && event.operation() == SyncOperation.UPSERT) {
                 validateProductBackup(event.entityId(), event.payload());
