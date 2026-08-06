@@ -40,12 +40,14 @@ import java.util.UUID;
 
 @Service
 public class ProductImportService {
-    public static final String TEMPLATE_VERSION = "2.0";
+    public static final String TEMPLATE_VERSION = "2.1";
     private static final Set<String> ALLOWED_TYPES = Set.of(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream", "");
 
     private final ProductImportProperties properties;
     private final ProductWorkbookParser parser;
+    private final ProductMasterDataResolver masterDataResolver;
+    private final ProductImportReferenceSheets referenceSheets;
     private final ProductImportValidator validator;
     private final ProductImportImageService imageService;
     private final ProductImportRepository importRepository;
@@ -56,13 +58,24 @@ public class ProductImportService {
     private final ObjectMapper objectMapper;
 
     public ProductImportService(ProductImportProperties properties, ProductWorkbookParser parser,
+                                ProductMasterDataResolver masterDataResolver,
+                                ProductImportReferenceSheets referenceSheets,
                                 ProductImportValidator validator, ProductImportImageService imageService,
                                 ProductImportRepository importRepository, ProductImportRowRepository rowRepository,
                                 ProductImportExecutor executor, ProductImportReportService reportService,
                                 StorageService storageService, ObjectMapper objectMapper) {
-        this.properties = properties; this.parser = parser; this.validator = validator; this.imageService = imageService;
-        this.importRepository = importRepository; this.rowRepository = rowRepository; this.executor = executor;
-        this.reportService = reportService; this.storageService = storageService; this.objectMapper = objectMapper;
+        this.properties = properties;
+        this.parser = parser;
+        this.masterDataResolver = masterDataResolver;
+        this.referenceSheets = referenceSheets;
+        this.validator = validator;
+        this.imageService = imageService;
+        this.importRepository = importRepository;
+        this.rowRepository = rowRepository;
+        this.executor = executor;
+        this.reportService = reportService;
+        this.storageService = storageService;
+        this.objectMapper = objectMapper;
     }
 
     public ProductImportPreviewResponse preview(MultipartFile file, String actor) {
@@ -84,50 +97,77 @@ public class ProductImportService {
                 "No se pudo guardar el original de la importación.");
 
         ProductImportEntity item = new ProductImportEntity();
-        item.setId(importId); item.setFileName(fileName); item.setFileHash(hash); item.setStorageKey(storageKey);
+        item.setId(importId);
+        item.setFileName(fileName);
+        item.setFileHash(hash);
+        item.setStorageKey(storageKey);
         if (zipBytes.length > 0) {
             item.setImageArchiveName(safeName(imageArchive.getOriginalFilename()));
             item.setImageArchiveHash(Digests.sha256(zipBytes));
             item.setImageArchiveStorageKey(store("imports/" + importId + "/images.zip", zipBytes,
                     "No se pudo guardar el ZIP de imágenes."));
         }
-        item.setTemplateVersion(TEMPLATE_VERSION); item.setStatus(ProductImportStatus.PREVIEW_READY);
-        item.setCreatedBy(actor); item.setCreatedAt(Instant.now());
+        item.setTemplateVersion(TEMPLATE_VERSION);
+        item.setStatus(ProductImportStatus.PREVIEW_READY);
+        item.setCreatedBy(actor);
+        item.setCreatedAt(Instant.now());
 
         List<ProductImportRowEntity> rows = new ArrayList<>();
         int valid = 0, warning = 0, error = 0;
         List<ProductImportCandidate> candidates;
         try {
-            candidates = parser.parse(bytes, imageEntries);
+            candidates = parser.parse(bytes, imageEntries).stream()
+                    .map(masterDataResolver::resolve)
+                    .toList();
         } catch (BusinessRuleException exception) {
             ProductImportRowEntity row = new ProductImportRowEntity();
-            row.setId(UUID.randomUUID().toString()); row.setImportId(importId); row.setRowNumber(0);
-            row.setFamilyCode("(archivo)"); row.setAction(ProductImportAction.REJECT);
-            row.setStatus(ProductImportRowStatus.ERROR); row.setCandidateJson("{}");
-            row.setMessagesJson(write(List.of(exception.getMessage()))); rows.add(row); error = 1;
+            row.setId(UUID.randomUUID().toString());
+            row.setImportId(importId);
+            row.setRowNumber(0);
+            row.setFamilyCode("(archivo)");
+            row.setAction(ProductImportAction.REJECT);
+            row.setStatus(ProductImportRowStatus.ERROR);
+            row.setCandidateJson("{}");
+            row.setMessagesJson(write(List.of(exception.getMessage())));
+            rows.add(row);
+            error = 1;
             candidates = List.of();
         }
         for (ProductImportCandidate candidate : candidates) {
             ProductImportValidator.ValidationResult validation = validator.validate(candidate);
             ProductImportRowEntity row = new ProductImportRowEntity();
-            row.setId(UUID.randomUUID().toString()); row.setImportId(importId); row.setRowNumber(candidate.sourceRow());
-            row.setFamilyCode(candidate.familyCode()); row.setProductId(validation.productId());
-            row.setExpectedVersion(validation.expectedVersion()); row.setAction(validation.action()); row.setStatus(validation.status());
-            row.setCandidateJson(write(candidate.aggregate())); row.setMessagesJson(write(validation.messages())); rows.add(row);
+            row.setId(UUID.randomUUID().toString());
+            row.setImportId(importId);
+            row.setRowNumber(candidate.sourceRow());
+            row.setFamilyCode(candidate.familyCode());
+            row.setProductId(validation.productId());
+            row.setExpectedVersion(validation.expectedVersion());
+            row.setAction(validation.action());
+            row.setStatus(validation.status());
+            row.setCandidateJson(write(candidate.aggregate()));
+            row.setMessagesJson(write(validation.messages()));
+            rows.add(row);
             if (validation.status() == ProductImportRowStatus.ERROR) error++;
             else if (validation.status() == ProductImportRowStatus.WARNING) warning++;
             else valid++;
         }
-        item.setTotalRows(rows.size()); item.setValidRows(valid); item.setWarningRows(warning); item.setErrorRows(error);
-        importRepository.save(item); rowRepository.saveAll(rows);
+        item.setTotalRows(rows.size());
+        item.setValidRows(valid);
+        item.setWarningRows(warning);
+        item.setErrorRows(error);
+        importRepository.save(item);
+        rowRepository.saveAll(rows);
         return toResponse(item);
     }
 
     public ProductImportPreviewResponse confirm(String importId) {
         List<String> rows = executor.prepare(importId);
         for (String rowId : rows) {
-            try { executor.executeRow(rowId); }
-            catch (RuntimeException exception) { executor.markFailed(rowId, rootMessage(exception)); }
+            try {
+                executor.executeRow(rowId);
+            } catch (RuntimeException exception) {
+                executor.markFailed(rowId, rootMessage(exception));
+            }
         }
         executor.finish(importId);
         return get(importId);
@@ -151,7 +191,9 @@ public class ProductImportService {
             CellStyle header = workbook.createCellStyle();
             header.setFillForegroundColor(IndexedColors.GOLD.getIndex());
             header.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-            var font = workbook.createFont(); font.setBold(true); header.setFont(font);
+            var font = workbook.createFont();
+            font.setBold(true);
+            header.setFont(font);
 
             sheet(workbook, header, "Fuentes", "Lote", "ArchivoPDF", "Seccion", "PaginaDesde", "PaginaHasta", "Observacion");
             sheet(workbook, header, "Productos", "CodigoFamilia", "ProductoId", "Version", "Nombre", "Descripcion",
@@ -165,13 +207,14 @@ public class ProductImportService {
                     "IGV", "Configuracion", "Precio", "Cotizar");
             sheet(workbook, header, "Imagenes", "CodigoFamilia", "SKU", "Archivo", "Tipo", "Principal");
             Sheet help = sheet(workbook, header, "Instrucciones", "Tema", "Detalle");
-            addHelp(help, "Alcance", "La plantilla importa únicamente productos y sus componentes. No crea empresas, marcas, categorías, clientes ni pedidos.");
-            addHelp(help, "Identidad", "CodigoFamilia agrupa todas las hojas. Cada SKU debe ser único dentro del producto.");
+            addHelp(help, "Alcance", "La plantilla importa productos y sus componentes. Empresas, marcas, categorías, atributos, unidades y listas se cargan primero desde Datos maestros.");
+            addHelp(help, "Identidad", "CodigoFamilia agrupa todas las hojas. Los IDs maestros pueden dejarse vacíos: el servidor los resuelve por nombre y jerarquía.");
             addHelp(help, "Atributos", "SKU vacío = atributo común de la familia. Con SKU = atributo técnico de esa variante.");
             addHelp(help, "Presentaciones", "SKU vacío aplica a todas las variantes activas; también puede repetir una presentación para SKU concretos.");
-            addHelp(help, "Precios", "Use Configuracion=precio_fijo con Precio, o Cotizar=SI. Un producto activo requiere todas sus combinaciones listas.");
+            addHelp(help, "Precios", "La moneda es siempre PEN. Use Configuracion=precio_fijo con Precio, o Cotizar=SI. La lista debe existir en Datos maestros.");
             addHelp(help, "Imágenes", "Archivo es la ruta relativa exacta dentro del ZIP opcional, por ejemplo pernos/FYB819295.webp.");
             addHelp(help, "PDF", "Registre en Fuentes el archivo, sección y páginas para comprobar que ningún bloque quedó sin procesar.");
+            referenceSheets.append(workbook, header);
 
             workbook.setActiveSheet(workbook.getSheetIndex("Productos"));
             workbook.write(output);
@@ -185,7 +228,9 @@ public class ProductImportService {
         Sheet sheet = workbook.createSheet(name);
         Row row = sheet.createRow(0);
         for (int index = 0; index < headers.length; index++) {
-            var cell = row.createCell(index); cell.setCellValue(headers[index]); cell.setCellStyle(headerStyle);
+            var cell = row.createCell(index);
+            cell.setCellValue(headers[index]);
+            cell.setCellStyle(headerStyle);
             sheet.setColumnWidth(index, Math.min(60, Math.max(15, headers[index].length() + 4)) * 256);
         }
         sheet.createFreezePane(0, 1);
@@ -195,18 +240,30 @@ public class ProductImportService {
 
     private void addHelp(Sheet sheet, String topic, String detail) {
         Row row = sheet.createRow(sheet.getLastRowNum() + 1);
-        row.createCell(0).setCellValue(topic); row.createCell(1).setCellValue(detail);
+        row.createCell(0).setCellValue(topic);
+        row.createCell(1).setCellValue(detail);
     }
 
     private byte[] validateAndRead(MultipartFile file) {
-        if (file == null || file.isEmpty()) throw new BusinessRuleException("EMPTY_IMPORT_FILE", "Selecciona un archivo XLSX.");
-        if (file.getSize() > properties.maxFileSizeBytes()) throw new BusinessRuleException("IMPORT_FILE_TOO_LARGE", "El XLSX supera el tamaño permitido.");
+        if (file == null || file.isEmpty()) {
+            throw new BusinessRuleException("EMPTY_IMPORT_FILE", "Selecciona un archivo XLSX.");
+        }
+        if (file.getSize() > properties.maxFileSizeBytes()) {
+            throw new BusinessRuleException("IMPORT_FILE_TOO_LARGE", "El XLSX supera el tamaño permitido.");
+        }
         String name = safeName(file.getOriginalFilename());
-        if (!name.toLowerCase().endsWith(".xlsx")) throw new BusinessRuleException("INVALID_IMPORT_EXTENSION", "Solo se aceptan archivos .xlsx sin macros.");
+        if (!name.toLowerCase().endsWith(".xlsx")) {
+            throw new BusinessRuleException("INVALID_IMPORT_EXTENSION", "Solo se aceptan archivos .xlsx sin macros.");
+        }
         String type = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
-        if (!ALLOWED_TYPES.contains(type)) throw new BusinessRuleException("INVALID_IMPORT_MIME", "El tipo MIME del archivo no está permitido.");
-        try { return file.getBytes(); }
-        catch (IOException exception) { throw new BusinessRuleException("IMPORT_READ_ERROR", "No se pudo leer el archivo recibido."); }
+        if (!ALLOWED_TYPES.contains(type)) {
+            throw new BusinessRuleException("INVALID_IMPORT_MIME", "El tipo MIME del archivo no está permitido.");
+        }
+        try {
+            return file.getBytes();
+        } catch (IOException exception) {
+            throw new BusinessRuleException("IMPORT_READ_ERROR", "No se pudo leer el archivo recibido.");
+        }
     }
 
     private byte[] readOptionalZip(MultipartFile archive) {
@@ -218,13 +275,19 @@ public class ProductImportService {
         if (archive.getSize() > 250L * 1024L * 1024L) {
             throw new BusinessRuleException("IMAGE_ARCHIVE_TOO_LARGE", "El ZIP de imágenes supera 250 MB.");
         }
-        try { return archive.getBytes(); }
-        catch (IOException exception) { throw new BusinessRuleException("IMAGE_ARCHIVE_READ_ERROR", "No se pudo leer el ZIP de imágenes."); }
+        try {
+            return archive.getBytes();
+        } catch (IOException exception) {
+            throw new BusinessRuleException("IMAGE_ARCHIVE_READ_ERROR", "No se pudo leer el ZIP de imágenes.");
+        }
     }
 
     private String store(String key, byte[] bytes, String message) {
-        try { return storageService.store(key, new ByteArrayInputStream(bytes), bytes.length); }
-        catch (IOException exception) { throw new BusinessRuleException("IMPORT_STORAGE_ERROR", message); }
+        try {
+            return storageService.store(key, new ByteArrayInputStream(bytes), bytes.length);
+        } catch (IOException exception) {
+            throw new BusinessRuleException("IMPORT_STORAGE_ERROR", message);
+        }
     }
 
     private String combinedHash(byte[] workbook, byte[] zip) {
@@ -240,7 +303,8 @@ public class ProductImportService {
         List<ProductImportRowResponse> rows = rowRepository.findByImportIdOrderByRowNumber(item.getId()).stream()
                 .map(row -> new ProductImportRowResponse(row.getId(), row.getRowNumber(), row.getFamilyCode(),
                         row.getProductId(), row.getExpectedVersion(), row.getAction(), row.getStatus(),
-                        messages(row.getMessagesJson()), row.getResultProductId(), row.getResultVersion())).toList();
+                        messages(row.getMessagesJson()), row.getResultProductId(), row.getResultVersion()))
+                .toList();
         return new ProductImportPreviewResponse(item.getId(), item.getFileName(), item.getFileHash(), item.getStatus(),
                 item.getTotalRows(), item.getValidRows(), item.getWarningRows(), item.getErrorRows(), item.getCreatedAt(),
                 item.getConfirmedAt(), rows);
@@ -248,15 +312,21 @@ public class ProductImportService {
 
     private List<String> messages(String json) {
         try {
-            JsonNode node = objectMapper.readTree(json); List<String> result = new ArrayList<>();
+            JsonNode node = objectMapper.readTree(json);
+            List<String> result = new ArrayList<>();
             if (node != null && node.isArray()) node.forEach(value -> result.add(value.asText()));
             return List.copyOf(result);
-        } catch (JacksonException exception) { return List.of("No se pudieron leer los mensajes de validación."); }
+        } catch (JacksonException exception) {
+            return List.of("No se pudieron leer los mensajes de validación.");
+        }
     }
 
     private String write(Object value) {
-        try { return objectMapper.writeValueAsString(value); }
-        catch (JacksonException exception) { throw new IllegalStateException("No se pudo serializar la vista previa.", exception); }
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JacksonException exception) {
+            throw new IllegalStateException("No se pudo serializar la vista previa.", exception);
+        }
     }
 
     private String safeName(String name) {
@@ -265,7 +335,8 @@ public class ProductImportService {
     }
 
     private String rootMessage(Throwable throwable) {
-        Throwable current = throwable; while (current.getCause() != null) current = current.getCause();
+        Throwable current = throwable;
+        while (current.getCause() != null) current = current.getCause();
         return current.getMessage() == null ? throwable.getClass().getSimpleName() : current.getMessage();
     }
 }
