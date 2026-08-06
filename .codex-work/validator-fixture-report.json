@@ -1,0 +1,26 @@
+{
+  "file": "D:\\backend-app-catalogo\\.codex-work\\validator-fixture-v2.xlsx",
+  "images": null,
+  "references": "D:\\downloads\\referencias_datos_maestros_ejemplo.xlsx",
+  "masters": null,
+  "valid": true,
+  "counts": {
+    "errors": 0,
+    "warnings": 1,
+    "info": 0,
+    "families": 1,
+    "variants": 1,
+    "prices": 1,
+    "images": 0
+  },
+  "messages": [
+    {
+      "severity": "WARNING",
+      "sheet": "Productos",
+      "row": 2,
+      "column": "CodigoFamilia",
+      "code": "NO_IMAGES",
+      "message": "La familia no tiene imágenes."
+    }
+  ]
+}

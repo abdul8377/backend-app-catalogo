@@ -73,6 +73,7 @@ public class ProductImportExecutor {
                 : row.getProductId();
         if (productId == null || productId.isBlank()) productId = UUID.randomUUID().toString();
         aggregate.put("productId", productId);
+        bindNestedProductId(aggregate, productId);
         aggregate = imageService.materialize(importItem, productId, aggregate);
 
         ProductResponse result;
@@ -102,6 +103,18 @@ public class ProductImportExecutor {
                 .anyMatch(row -> row.getStatus() == ProductImportRowStatus.FAILED);
         item.setStatus(failed ? ProductImportStatus.FAILED : ProductImportStatus.CONFIRMED);
         if (!failed) item.setConfirmedAt(Instant.now());
+    }
+
+    private void bindNestedProductId(ObjectNode aggregate, String productId) {
+        for (JsonNode raw : aggregate.path("attributeValues")) {
+            if (raw instanceof ObjectNode value) value.put("producto_id", productId);
+        }
+        for (JsonNode raw : aggregate.path("familyAxes")) {
+            if (raw instanceof ObjectNode axis) axis.put("producto_id", productId);
+        }
+        for (JsonNode raw : aggregate.path("attributeOptions")) {
+            if (raw instanceof ObjectNode option) option.put("producto_id", productId);
+        }
     }
 
     private ObjectNode readObject(String json) {

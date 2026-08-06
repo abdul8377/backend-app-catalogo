@@ -1,0 +1,802 @@
+{
+  "file": "D:\\downloads\\productos_dina_moto_mayo_2026_p15_27.xlsx",
+  "images": "D:\\downloads\\imagenes_dina_moto_mayo_2026_p15_27.zip",
+  "references": "D:\\downloads\\referencias_datos_maestros_ejemplo.xlsx",
+  "masters": null,
+  "valid": false,
+  "counts": {
+    "errors": 63,
+    "warnings": 35,
+    "info": 0,
+    "families": 20,
+    "variants": 342,
+    "prices": 342,
+    "images": 18
+  },
+  "messages": [
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 2,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 2,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 2,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 3,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 3,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 3,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 4,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 4,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 4,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 5,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 5,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 5,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 6,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 6,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 6,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 7,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 7,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 7,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 8,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 8,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 8,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 9,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 9,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 9,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 10,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 10,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 10,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 11,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 11,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 11,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 12,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 12,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 12,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Productos",
+      "row": 13,
+      "column": "CodigoFamilia",
+      "code": "NO_IMAGES",
+      "message": "La familia no tiene imágenes."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 13,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 13,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 13,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 14,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 14,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 14,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 15,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 15,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 15,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 16,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 16,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 16,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 17,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 17,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 17,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 18,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 18,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 18,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Productos",
+      "row": 19,
+      "column": "CodigoFamilia",
+      "code": "NO_IMAGES",
+      "message": "La familia no tiene imágenes."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 19,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 19,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 19,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 20,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 20,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 20,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 21,
+      "column": "EmpresaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "EmpresaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 21,
+      "column": "MarcaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "MarcaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Productos",
+      "row": 21,
+      "column": "CategoriaId",
+      "code": "MASTER_ID_REQUIRED",
+      "message": "CategoriaId es obligatorio y debe provenir del Excel de referencias."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Presentaciones",
+      "row": 2,
+      "column": "UnidadBase",
+      "code": "UNKNOWN_MEASUREMENT_UNIT",
+      "message": "UnidadBase no existe en Ref_Unidades."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Presentaciones",
+      "row": 3,
+      "column": "UnidadBase",
+      "code": "UNKNOWN_MEASUREMENT_UNIT",
+      "message": "UnidadBase no existe en Ref_Unidades."
+    },
+    {
+      "severity": "ERROR",
+      "sheet": "Presentaciones",
+      "row": 6,
+      "column": "UnidadBase",
+      "code": "UNKNOWN_MEASUREMENT_UNIT",
+      "message": "UnidadBase no existe en Ref_Unidades."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 2,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 3,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 4,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 5,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 6,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 7,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 8,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 8,
+      "column": "Unidad",
+      "code": "UNKNOWN_ATTRIBUTE_UNIT",
+      "message": "La unidad del atributo no aparece en Ref_Unidades."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 57,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 58,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 175,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 176,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 177,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 179,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 180,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 181,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 182,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 184,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 185,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 196,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 197,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 245,
+      "column": "Unidad",
+      "code": "UNKNOWN_ATTRIBUTE_UNIT",
+      "message": "La unidad del atributo no aparece en Ref_Unidades."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 246,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 258,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 271,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 282,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 1095,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 1140,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 1143,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 1144,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 1385,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 1389,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 1580,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    }
+  ]
+}

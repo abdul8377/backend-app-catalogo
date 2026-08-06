@@ -68,6 +68,7 @@ public class ProductImportValidator {
         return new ValidationResult(action, status, productId, expectedVersion, List.copyOf(messages));
     }
 
+
     public record ValidationResult(ProductImportAction action, ProductImportRowStatus status,
                                    String productId, Long expectedVersion, List<String> messages) {
     }

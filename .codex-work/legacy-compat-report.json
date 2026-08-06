@@ -1,0 +1,58 @@
+{
+  "file": "D:\\backend-app-catalogo\\.codex-work\\skill-v2\\app-catalogo-product-import\\examples\\DINA_pagina_32_parcial.xlsx",
+  "images": null,
+  "references": null,
+  "masters": "D:\\backend-app-catalogo\\.codex-work\\skill-v2\\app-catalogo-product-import\\references\\master_data_example.json",
+  "valid": true,
+  "counts": {
+    "errors": 0,
+    "warnings": 5,
+    "info": 0,
+    "families": 1,
+    "variants": 5,
+    "prices": 5,
+    "images": 0
+  },
+  "messages": [
+    {
+      "severity": "WARNING",
+      "sheet": "(maestros)",
+      "row": 0,
+      "column": "",
+      "code": "LEGACY_MASTERS_MODE",
+      "message": "--masters se conserva solo para pruebas; las importaciones reales deben usar --references."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Productos",
+      "row": 2,
+      "column": "CodigoFamilia",
+      "code": "NO_IMAGES",
+      "message": "La familia no tiene imágenes."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 5,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 6,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Atributos",
+      "row": 28,
+      "column": "Atributo",
+      "code": "UNCONFIGURED_ATTRIBUTE",
+      "message": "El atributo no está configurado para la categoría o subcategoría; inclúyalo como decisión pendiente."
+    }
+  ]
+}

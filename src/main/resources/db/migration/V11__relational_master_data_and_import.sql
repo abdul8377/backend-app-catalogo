@@ -214,7 +214,7 @@ CREATE TABLE master_imports (
 CREATE TABLE master_import_rows (
     id CHAR(36) PRIMARY KEY,
     import_id CHAR(36) NOT NULL,
-    row_number INT NOT NULL,
+    num_row INT NOT NULL,
     sheet_name VARCHAR(80) NOT NULL,
     entity_type VARCHAR(80) NOT NULL,
     entity_id VARCHAR(160) NOT NULL,
@@ -225,7 +225,7 @@ CREATE TABLE master_import_rows (
     result_version BIGINT NULL,
     result_sequence BIGINT NULL,
     CONSTRAINT fk_master_import_rows_import FOREIGN KEY (import_id) REFERENCES master_imports(id) ON DELETE CASCADE,
-    INDEX idx_master_import_rows_import (import_id, row_number)
+    INDEX idx_master_import_rows_import (import_id, num_row)
 );
 
 CREATE OR REPLACE VIEW sync_master_payloads AS

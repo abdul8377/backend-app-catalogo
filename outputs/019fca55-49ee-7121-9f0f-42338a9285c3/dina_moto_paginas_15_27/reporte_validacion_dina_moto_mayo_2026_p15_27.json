@@ -1,0 +1,154 @@
+{
+  "file": "outputs\\019fca55-49ee-7121-9f0f-42338a9285c3\\dina_moto_paginas_15_27\\productos_dina_moto_mayo_2026_p15_27.xlsx",
+  "images": "outputs\\019fca55-49ee-7121-9f0f-42338a9285c3\\dina_moto_paginas_15_27\\imagenes_dina_moto_mayo_2026_p15_27.zip",
+  "masters": null,
+  "valid": true,
+  "counts": {
+    "errors": 0,
+    "warnings": 3,
+    "info": 0,
+    "families": 20,
+    "variants": 342,
+    "prices": 342,
+    "images": 18
+  },
+  "messages": [
+    {
+      "severity": "WARNING",
+      "sheet": "(maestros)",
+      "row": 0,
+      "column": "",
+      "code": "MASTERS_NOT_PROVIDED",
+      "message": "No se proporcionó archivo de datos maestros."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Productos",
+      "row": 13,
+      "column": "CodigoFamilia",
+      "code": "NO_IMAGES",
+      "message": "La familia no tiene imágenes."
+    },
+    {
+      "severity": "WARNING",
+      "sheet": "Productos",
+      "row": 19,
+      "column": "CodigoFamilia",
+      "code": "NO_IMAGES",
+      "message": "La familia no tiene imágenes."
+    }
+  ],
+  "generatedAt": "2026-08-05T14:24:55.781988+00:00",
+  "scope": {
+    "sourcePdf": "D:\\downloads\\catalogos-productos\\LIP GENERAL AUTOMOTRIZ MAYO 2026 - DINA® 2.0.pdf",
+    "section": "Línea Moto",
+    "pageFrom": 15,
+    "pageTo": 27,
+    "company": "DINAFAST S.A.C.",
+    "brand": "DINA",
+    "priceList": "DINA mayo 2026",
+    "currency": "PEN",
+    "igv": "18",
+    "initialStatus": "DRAFT"
+  },
+  "reconciliation": {
+    "familiesInExcel": 20,
+    "excludedFamilies": 2,
+    "variantsInCatalogCountCsv": 342,
+    "variantsInExcelValidator": 342,
+    "fixedPrices": 290,
+    "quotePrices": 52,
+    "totalPrices": 342,
+    "duplicateSkus": [],
+    "declaredImages": 18,
+    "zipEntries": 18
+  },
+  "qualityGate": {
+    "localValidatorErrorsZero": true,
+    "variantCountsMatch": true,
+    "priceCountsMatch": true,
+    "skusUnique": true,
+    "imagePathsMatchZip": true,
+    "currencyIsPen": true,
+    "allProductsDraft": true
+  },
+  "excluded": [
+    {
+      "page": 17,
+      "family": "TUERCA HEXAGONAL MÉTRICA RF",
+      "reason": "La columna CÓD. usa una notación compuesta ambigua (incluye ‘5212/12’) y no permite reconstruir todos los SKU oficiales sin inventarlos.",
+      "visible_rows": 10,
+      "visible_priced_cells": 17
+    },
+    {
+      "page": 25,
+      "family": "PERNO DE RUEDA MOTOCARGUERO CAB. 1/2 LUNA C./LISO CL. 10.9",
+      "reason": "La única fila no publica código; no se puede crear un SKU sin inventarlo.",
+      "visible_rows": 1,
+      "visible_priced_cells": 0
+    }
+  ],
+  "pendingDecisions": [
+    {
+      "id": "D-01",
+      "page": 17,
+      "severity": "BLOCKING_AFFECTED_FAMILY",
+      "topic": "Códigos compuestos de TUERCA HEXAGONAL MÉTRICA RF",
+      "question": "Confirmar la regla oficial para combinar CÓD. con M0502, M0102 y BM3200, especialmente la fila ‘5212/12’.",
+      "effect": "La familia queda fuera del Excel; no se inventaron SKU."
+    },
+    {
+      "id": "D-02",
+      "page": 17,
+      "severity": "BLOCKING_PRESENTATION",
+      "topic": "Presentación de TUERCA FLANGE FEY P/MOTO CINCADA",
+      "question": "¿El precio publicado corresponde a unidad, ciento u otra presentación?",
+      "effect": "Se usa ‘Pendiente de confirmar’ en un producto DRAFT; no debe confirmarse hasta resolverlo."
+    },
+    {
+      "id": "D-03",
+      "page": 18,
+      "severity": "BLOCKING_PRESENTATION",
+      "topic": "Presentación de PNO. FLANGE /MOTO NIQUELADO FEY",
+      "question": "¿El precio publicado corresponde a unidad, ciento u otra presentación?",
+      "effect": "Se conserva como ‘Pendiente de confirmar’ en DRAFT."
+    },
+    {
+      "id": "D-04",
+      "page": 18,
+      "severity": "DATA_GAP",
+      "topic": "Dimensión del SKU FYB802693",
+      "question": "Confirmar dimensión y empaque: el catálogo deja ambas celdas vacías.",
+      "effect": "El SKU se incluye sin inferir esos dos atributos y con precio por cotizar."
+    },
+    {
+      "id": "D-05",
+      "page": 20,
+      "severity": "BLOCKING_PRESENTATION",
+      "topic": "Presentación de PERNOS P/MOTO FEY",
+      "question": "¿El precio publicado corresponde a unidad, ciento u otra presentación?",
+      "effect": "Se conserva como ‘Pendiente de confirmar’ en DRAFT."
+    },
+    {
+      "id": "D-06",
+      "page": 25,
+      "severity": "BLOCKING_AFFECTED_FAMILY",
+      "topic": "Código faltante del perno 1/2 luna c./liso",
+      "question": "Proporcionar el código DINA para M12 x 1.25, largo 40 mm, Ø 12.50 mm.",
+      "effect": "La familia queda fuera del Excel; no se inventó SKU."
+    },
+    {
+      "id": "D-07",
+      "page": 27,
+      "severity": "PRICE_ANOMALY",
+      "topic": "Precio inusual del SKU M221008",
+      "question": "Confirmar si PEN 1.11 es correcto para M10 x 40 mm; es muy inferior a medidas contiguas.",
+      "effect": "Se preserva exactamente el precio impreso en el catálogo y el producto permanece DRAFT."
+    }
+  ],
+  "manualWarnings": [
+    "La familia BOCINA DE EJE S/PESTAÑA PAVONADO no tiene una imagen propia claramente asociada en la página 24.",
+    "La familia ESPÁRRAGO MÉTRICO RF - RF CL 8.8 DINA no tiene una imagen propia claramente asociada en la página 26."
+  ],
+  "deliverableState": "DRAFT_REQUIRES_DECISIONS"
+}

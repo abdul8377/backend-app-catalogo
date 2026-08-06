@@ -51,6 +51,8 @@ public class MasterDataImportService {
             "CATEGORY_ATTRIBUTE", "CATEGORY_ATTRIBUTE_OPTION", "CATEGORY_ATTRIBUTE_UNIT", "PRICE_LIST");
     private static final Set<String> ATTRIBUTE_TYPES = Set.of(
             "texto_corto", "numero", "numero_unidad", "lista_unica", "lista_multiple", "si_no");
+    private static final Set<String> CAPTURE_LEVELS = Set.of("familia", "variante", "decidir");
+    private static final int MAX_ROWS = 10_000;
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
@@ -98,7 +100,7 @@ public class MasterDataImportService {
                 errors, actor == null ? "admin" : actor, Instant.now());
         for (Candidate candidate : candidates) {
             jdbc.update("""
-                    INSERT INTO master_import_rows(id, import_id, row_number, sheet_name, entity_type,
+                    INSERT INTO master_import_rows(id, import_id, num_row, sheet_name, entity_type,
                         entity_id, action, status, payload_json, messages_json)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, UUID.randomUUID().toString(), importId, candidate.rowNumber(), candidate.sheet(),
@@ -122,10 +124,10 @@ public class MasterDataImportService {
         if ("CONFIRMED".equals(header.get("status"))) return get(importId);
 
         List<StoredRow> rows = jdbc.query("""
-                SELECT id, row_number, sheet_name, entity_type, entity_id, action, status,
+                SELECT id, num_row, sheet_name, entity_type, entity_id, action, status,
                        payload_json, messages_json, result_version, result_sequence
                 FROM master_import_rows WHERE import_id = ?
-                """, (rs, index) -> new StoredRow(rs.getString("id"), rs.getInt("row_number"),
+                """, (rs, index) -> new StoredRow(rs.getString("id"), rs.getInt("num_row"),
                 rs.getString("sheet_name"), rs.getString("entity_type"), rs.getString("entity_id"),
                 rs.getString("action"), rs.getString("status"), rs.getString("payload_json"),
                 rs.getString("messages_json"), number(rs.getObject("result_version")),
@@ -156,11 +158,11 @@ public class MasterDataImportService {
             throw new ResourceNotFoundException("MASTER_IMPORT_NOT_FOUND", "La importación de maestros no existe.");
         }
         List<ImportRow> rows = jdbc.query("""
-                SELECT row_number, sheet_name, entity_type, entity_id, action, status,
+                SELECT num_row, sheet_name, entity_type, entity_id, action, status,
                        messages_json, result_version, result_sequence
                 FROM master_import_rows WHERE import_id = ?
-                ORDER BY row_number, sheet_name
-                """, (rs, index) -> new ImportRow(rs.getInt("row_number"), rs.getString("sheet_name"),
+                ORDER BY num_row, sheet_name
+                """, (rs, index) -> new ImportRow(rs.getInt("num_row"), rs.getString("sheet_name"),
                 rs.getString("entity_type"), rs.getString("entity_id"), rs.getString("action"),
                 rs.getString("status"), strings(rs.getString("messages_json")),
                 number(rs.getObject("result_version")), number(rs.getObject("result_sequence"))), importId);
@@ -192,6 +194,8 @@ public class MasterDataImportService {
             help(instructions, "Flujo", "Descarga, completa, carga para vista previa y confirma solo cuando no existan errores.");
             help(instructions, "Identidades", "Id es opcional. Si queda vacío, el servidor reutiliza el registro por su clave natural o genera un UUID estable.");
             help(instructions, "Jerarquía", "RutaPadre y RutaCategoria usan >, por ejemplo Línea Moto > Pernos para moto.");
+            help(instructions, "Orden de categorías", "En Categorias, coloca cada fila padre antes de sus hijas.");
+            help(instructions, "Valores permitidos", "Estado: SI/NO o ACTIVO/INACTIVO. TipoDato: texto_corto, numero, numero_unidad, lista_unica, lista_multiple o si_no. NivelCaptura: familia, variante o decidir.");
             help(instructions, "Relación de marca", "Relaciona la marca con la categoría principal. Las subcategorías heredan esa relación.");
             help(instructions, "Moneda", "La moneda está fijada en PEN. Cualquier otro código bloquea la importación.");
             help(instructions, "Sincronización", "Al confirmar, cada fila publica un cambio normal y queda disponible para la tablet.");
@@ -219,6 +223,11 @@ public class MasterDataImportService {
             parseOptions(workbook, context, result);
             parseAttributeUnits(workbook, context, result);
             parsePriceLists(workbook, context, result);
+            if (result.size() > MAX_ROWS) {
+                throw new BusinessRuleException(
+                        "MASTER_IMPORT_ROW_LIMIT",
+                        "El libro supera el máximo de " + MAX_ROWS + " filas de datos maestros.");
+            }
             if (result.isEmpty()) {
                 throw new BusinessRuleException("EMPTY_MASTER_IMPORT", "El Excel no contiene filas de datos maestros.");
             }
@@ -236,7 +245,7 @@ public class MasterDataImportService {
             ObjectNode payload = objectMapper.createObjectNode();
             payload.put("id", id); payload.put("nombre", name); payload.put("ruc", row.value("ruc"));
             payload.put("telefono", row.value("telefono")); payload.put("direccion", row.value("direccion"));
-            payload.put("estado", active(row.value("estado")));
+            payload.put("estado", active(row.value("estado"), errors));
             context.companies.put(masters.normalize(name), id);
             add(output, row, "Empresas", "COMPANY", id, payload, errors);
         }
@@ -251,7 +260,7 @@ public class MasterDataImportService {
                     stableId("brand", companyId, masters.normalize(name)));
             ObjectNode payload = objectMapper.createObjectNode();
             payload.put("id", id); put(payload, "empresa_id", companyId); payload.put("nombre", name);
-            payload.put("estado", active(row.value("estado")));
+            payload.put("estado", active(row.value("estado"), errors));
             if (companyId != null) context.brands.put(companyId + "|" + masters.normalize(name), id);
             add(output, row, "Marcas", "BRAND", id, payload, errors);
         }
@@ -269,7 +278,7 @@ public class MasterDataImportService {
             String id = first(row.value("id"), existing, stableId("category", masters.normalize(fullPath)));
             ObjectNode payload = objectMapper.createObjectNode();
             payload.put("id", id); put(payload, "categoria_padre_id", parentId); payload.put("nombre", name);
-            payload.put("descripcion", row.value("descripcion")); payload.put("estado", active(row.value("estado")));
+            payload.put("descripcion", row.value("descripcion")); payload.put("estado", active(row.value("estado"), errors));
             context.categories.put(masters.normalize(fullPath), id);
             add(output, row, "Categorias", "CATEGORY", id, payload, errors);
         }
@@ -288,7 +297,7 @@ public class MasterDataImportService {
             String id = first(row.value("id"), stableId("brand-category", brandId, categoryId));
             ObjectNode payload = objectMapper.createObjectNode();
             payload.put("id", id); put(payload, "marca_id", brandId); put(payload, "categoria_id", categoryId);
-            payload.put("estado", active(row.value("estado")));
+            payload.put("estado", active(row.value("estado"), errors));
             add(output, row, "MarcaCategorias", "BRAND_CATEGORY", id, payload, errors);
         }
     }
@@ -304,7 +313,13 @@ public class MasterDataImportService {
             payload.put("simbolo", required(row, "simbolo", errors)); payload.put("magnitud", required(row, "magnitud", errors));
             decimal(payload, "factor_a_base", row.value("factorbase"), "1", errors, "FactorBase");
             integer(payload, "decimales", row.value("decimales"), 3, errors, "Decimales");
-            payload.put("estado", active(row.value("estado")));
+            if (payload.path("factor_a_base").decimalValue().signum() <= 0) {
+                errors.add("FactorBase debe ser mayor que cero.");
+            }
+            if (payload.path("decimales").asInt() < 0) {
+                errors.add("Decimales no puede ser negativo.");
+            }
+            payload.put("estado", active(row.value("estado"), errors));
             context.units.put(masters.normalize(code), id);
             add(output, row, "Unidades", "MEASUREMENT_UNIT", id, payload, errors);
         }
@@ -322,10 +337,14 @@ public class MasterDataImportService {
             ObjectNode payload = objectMapper.createObjectNode();
             payload.put("id", id); put(payload, "categoria_id", categoryId); payload.put("nombre", name);
             payload.put("clave", defaultValue(row.value("clave"), safeToken(name)));
-            payload.put("tipo_dato", type); payload.put("nivel_captura", defaultValue(row.value("nivelcaptura"), "familia"));
+            String captureLevel = defaultValue(row.value("nivelcaptura"), "familia").toLowerCase(Locale.ROOT);
+            if (!CAPTURE_LEVELS.contains(captureLevel)) {
+                errors.add("NivelCaptura no es válido: " + captureLevel + ".");
+            }
+            payload.put("tipo_dato", type); payload.put("nivel_captura", captureLevel);
             payload.put("requerido_activar", yes(row.value("requerido"))); payload.put("visible_ficha", !no(row.value("visibleficha")));
             payload.put("filtrable", yes(row.value("filtrable"))); payload.put("puede_ser_eje", yes(row.value("puedesereje")));
-            integer(payload, "orden", row.value("orden"), 0, errors, "Orden"); payload.put("estado", active(row.value("estado")));
+            integer(payload, "orden", row.value("orden"), 0, errors, "Orden"); payload.put("estado", active(row.value("estado"), errors));
             if (categoryId != null) context.attributes.put(categoryId + "|" + masters.normalize(name), id);
             add(output, row, "Atributos", "CATEGORY_ATTRIBUTE", id, payload, errors);
         }
@@ -341,7 +360,7 @@ public class MasterDataImportService {
             ObjectNode payload = objectMapper.createObjectNode();
             payload.put("id", id); put(payload, "categoria_atributo_id", attributeId);
             payload.put("etiqueta", label); payload.put("codigo", code);
-            integer(payload, "orden", row.value("orden"), 0, errors, "Orden"); payload.put("estado", active(row.value("estado")));
+            integer(payload, "orden", row.value("orden"), 0, errors, "Orden"); payload.put("estado", active(row.value("estado"), errors));
             add(output, row, "Opciones", "CATEGORY_ATTRIBUTE_OPTION", id, payload, errors);
         }
     }
@@ -357,7 +376,7 @@ public class MasterDataImportService {
             ObjectNode payload = objectMapper.createObjectNode();
             payload.put("id", id); put(payload, "categoria_atributo_id", attributeId); put(payload, "unidad_medida_id", unitId);
             payload.put("es_predeterminada", yes(row.value("predeterminada")));
-            integer(payload, "orden", row.value("orden"), 0, errors, "Orden"); payload.put("estado", active(row.value("estado")));
+            integer(payload, "orden", row.value("orden"), 0, errors, "Orden"); payload.put("estado", active(row.value("estado"), errors));
             add(output, row, "AtributoUnidades", "CATEGORY_ATTRIBUTE_UNIT", id, payload, errors);
         }
     }
@@ -374,7 +393,7 @@ public class MasterDataImportService {
             payload.put("id", id); payload.put("nombre", name); payload.put("moneda", "PEN");
             payload.put("incluye_igv", !no(row.value("incluyeigv")));
             decimal(payload, "igv_porcentaje", row.value("igv"), "18", errors, "IGV");
-            payload.put("estado", active(row.value("estado")));
+            payload.put("estado", active(row.value("estado"), errors));
             context.priceLists.put(masters.normalize(name), id);
             add(output, row, "ListasPrecio", "PRICE_LIST", id, payload, errors);
         }
@@ -531,7 +550,13 @@ public class MasterDataImportService {
     private String defaultValue(String value, String fallback) { return value == null || value.isBlank() ? fallback : value.trim(); }
     private boolean yes(String value) { return Set.of("si", "sí", "1", "true", "yes", "activo").contains(masters.normalize(value)); }
     private boolean no(String value) { return Set.of("no", "0", "false", "inactivo").contains(masters.normalize(value)); }
-    private boolean active(String value) { return value == null || value.isBlank() || !no(value); }
+    private boolean active(String value, List<String> errors) {
+        if (value == null || value.isBlank()) return true;
+        if (yes(value)) return true;
+        if (no(value)) return false;
+        errors.add("Estado debe ser SI/NO, ACTIVO/INACTIVO, 1/0 o TRUE/FALSE.");
+        return true;
+    }
 
     private String required(RowData row, String field, List<String> errors) {
         String value = row.value(field).trim();

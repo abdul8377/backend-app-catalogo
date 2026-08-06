@@ -1,0 +1,13 @@
+{
+  "name": "app-catalogo-product-import",
+  "version": "2.0.0",
+  "language": "es-PE",
+  "inputs": ["catalog_pdf", "page_range", "references_xlsx", "excel_template_optional"],
+  "outputs": ["xlsx", "images_zip_optional", "validation_report", "source_counts", "missing_master_data_optional", "pending_decisions_optional"],
+  "currency": "PEN",
+  "igvDefault": 18,
+  "productOnly": true,
+  "requiresRealMasterIds": true,
+  "referenceWorkbook": "referencias-datos-maestros.xlsx",
+  "initialProductStatus": "DRAFT"
+}
