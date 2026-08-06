@@ -43,9 +43,7 @@ public class MasterDataProjectionRebuildRunner implements ApplicationRunner {
             JsonNode payload = read(record.getPayloadJson());
             masterData.apply(record.getEntityType(), record.getEntityId(), payload, record.getVersion(),
                     record.getOriginDeviceId(), record.isDeleted());
-            if (record.getLastSequence() != null) {
-                masterData.updateLastSequence(record.getEntityType(), record.getEntityId(), record.getLastSequence());
-            }
+            masterData.updateLastSequence(record.getEntityType(), record.getEntityId(), record.getLastSequence());
             record.setPayloadJson("{}");
         }
         records.saveAll(masters);
