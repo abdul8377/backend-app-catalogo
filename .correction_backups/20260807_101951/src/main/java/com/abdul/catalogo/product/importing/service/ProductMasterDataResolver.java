@@ -568,9 +568,9 @@ public class ProductMasterDataResolver {
                 axis.put("orden", order++);
             }
         }
-        if (order < 2) {
-            errors.add("Un producto MATRIX debe tener al menos dos atributos de variante "
-                    + "independientes, marcados PuedeSerEje y con valores distintos.");
+        if (order == 0) {
+            errors.add("Un producto MATRIX debe tener al menos un atributo de variante "
+                    + "marcado PuedeSerEje con valores distintos.");
         }
         return axes;
     }

@@ -140,12 +140,6 @@ public class ProductProjectionService {
         requireArray(aggregate, "prices");
         requireArray(aggregate, "images");
         requireOptionalArray(aggregate, "familyAxes");
-        if (productType(aggregate) == ProductType.MATRIX
-                && aggregate.path("familyAxes").size() < 2) {
-            throw new BusinessRuleException(
-                    "MATRIX_PRODUCT_AXES_REQUIRED",
-                    "Un producto MATRIX debe declarar al menos dos ejes independientes.");
-        }
         requireOptionalArray(aggregate, "attributeValues");
         requireOptionalArray(aggregate, "attributeOptions");
         requireOptionalObject(aggregate, "salesConfiguration");
