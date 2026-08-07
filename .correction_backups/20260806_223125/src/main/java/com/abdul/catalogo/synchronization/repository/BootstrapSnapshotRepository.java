@@ -72,13 +72,7 @@ public class BootstrapSnapshotRepository {
         List<SnapshotRecord> records = jdbcTemplate.query(SNAPSHOT_CTE
                         + "SELECT entity_type, entity_id, version, deleted, payload_json, updated_at "
                         + "FROM snapshot_records WHERE entity_type IN (" + SUPPORTED_TYPES + ") "
-                        + "ORDER BY " + DEPENDENCY_ORDER + ", "
-                        + "CASE WHEN entity_type = 'CATEGORY' THEN "
-                        + "CASE WHEN EXISTS (SELECT 1 FROM categorias category_row "
-                        + "WHERE category_row.id = snapshot_records.entity_id "
-                        + "AND category_row.categoria_padre_id IS NULL) "
-                        + "THEN 0 ELSE 1 END "
-                        + "ELSE 0 END, entity_id LIMIT ? OFFSET ?",
+                        + "ORDER BY " + DEPENDENCY_ORDER + ", entity_id LIMIT ? OFFSET ?",
                 (resultSet, rowNumber) -> new SnapshotRecord(
                         resultSet.getString("entity_type"), resultSet.getString("entity_id"),
                         resultSet.getLong("version"), resultSet.getBoolean("deleted"),
