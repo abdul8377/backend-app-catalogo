@@ -510,7 +510,6 @@ public class ProductMasterDataResolver {
         for (OptionDefinition option : selected.values()) {
             ObjectNode selectedOption = selectedOptions.addObject();
             selectedOption.put("producto_atributo_id", valueId);
-            selectedOption.put("categoria_atributo_id", definition.id());
             selectedOption.put("opcion_id", option.id());
         }
         return joinedIds;

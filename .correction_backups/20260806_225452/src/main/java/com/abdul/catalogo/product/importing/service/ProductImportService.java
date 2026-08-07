@@ -41,7 +41,6 @@ import java.util.UUID;
 @Service
 public class ProductImportService {
     public static final String TEMPLATE_VERSION = "2.1";
-    private static final String IMPORT_CONTRACT_REVISION = "projection-v2";
     private static final Set<String> ALLOWED_TYPES = Set.of(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream", "");
 
@@ -87,7 +86,7 @@ public class ProductImportService {
     public ProductImportPreviewResponse preview(MultipartFile file, MultipartFile imageArchive, String actor) {
         byte[] bytes = validateAndRead(file);
         byte[] zipBytes = readOptionalZip(imageArchive);
-        String hash = combinedHash(bytes, zipBytes, TEMPLATE_VERSION + ":" + IMPORT_CONTRACT_REVISION);
+        String hash = combinedHash(bytes, zipBytes);
         ProductImportEntity existing = importRepository.findByFileHash(hash).orElse(null);
         if (existing != null) return toResponse(existing);
 
@@ -291,16 +290,12 @@ public class ProductImportService {
         }
     }
 
-    private String combinedHash(byte[] workbook, byte[] zip, String contractRevision) {
+    private String combinedHash(byte[] workbook, byte[] zip) {
         byte[] separator = "::IMAGES::".getBytes(StandardCharsets.UTF_8);
-        byte[] revision = ("::CONTRACT::" + contractRevision).getBytes(StandardCharsets.UTF_8);
-        byte[] combined = new byte[
-                workbook.length + separator.length + zip.length + revision.length];
+        byte[] combined = new byte[workbook.length + separator.length + zip.length];
         System.arraycopy(workbook, 0, combined, 0, workbook.length);
         System.arraycopy(separator, 0, combined, workbook.length, separator.length);
         System.arraycopy(zip, 0, combined, workbook.length + separator.length, zip.length);
-        System.arraycopy(revision, 0, combined,
-                workbook.length + separator.length + zip.length, revision.length);
         return Digests.sha256(combined);
     }
 

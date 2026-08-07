@@ -107,22 +107,16 @@ public class ProductImportExecutor {
 
     private void bindNestedProductId(ObjectNode aggregate, String productId) {
         for (JsonNode raw : aggregate.path("attributeValues")) {
-            if (!(raw instanceof ObjectNode value)) continue;
-            String variantId = value.path("variante_id").asText("").trim();
-            if (variantId.isBlank()) {
-                value.put("producto_id", productId);
-                value.putNull("variante_id");
-            } else {
-                value.remove("producto_id");
-            }
+            if (raw instanceof ObjectNode value) value.put("producto_id", productId);
         }
         for (JsonNode raw : aggregate.path("familyAxes")) {
             if (raw instanceof ObjectNode axis) axis.put("producto_id", productId);
         }
         for (JsonNode raw : aggregate.path("attributeOptions")) {
-            if (raw instanceof ObjectNode option) option.remove("producto_id");
+            if (raw instanceof ObjectNode option) option.put("producto_id", productId);
         }
     }
+
     private ObjectNode readObject(String json) {
         try {
             JsonNode node = objectMapper.readTree(json);
