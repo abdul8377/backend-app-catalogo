@@ -87,9 +87,7 @@ public class ProductImportService {
     public ProductImportPreviewResponse preview(MultipartFile file, MultipartFile imageArchive, String actor) {
         byte[] bytes = validateAndRead(file);
         byte[] zipBytes = readOptionalZip(imageArchive);
-        long masterRevision = masterDataResolver.currentMasterRevision();
-        String baseHash = combinedHash(bytes, zipBytes, TEMPLATE_VERSION + ":" + IMPORT_CONTRACT_REVISION);
-        String hash = Digests.sha256((baseHash + "::MASTER_REVISION::" + masterRevision).getBytes(StandardCharsets.UTF_8));
+        String hash = combinedHash(bytes, zipBytes, TEMPLATE_VERSION + ":" + IMPORT_CONTRACT_REVISION);
         ProductImportEntity existing = importRepository.findByFileHash(hash).orElse(null);
         if (existing != null) return toResponse(existing);
 

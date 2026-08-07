@@ -45,25 +45,6 @@ public class ProductMasterDataResolver {
         this.objectMapper = objectMapper;
     }
 
-    public long currentMasterRevision() {
-        Long revision = jdbc.queryForObject("""
-                SELECT COALESCE(MAX(sequence), 0)
-                FROM sync_change_log
-                WHERE entity_type IN (
-                    'COMPANY',
-                    'BRAND',
-                    'CATEGORY',
-                    'BRAND_CATEGORY',
-                    'MEASUREMENT_UNIT',
-                    'CATEGORY_ATTRIBUTE',
-                    'CATEGORY_ATTRIBUTE_OPTION',
-                    'CATEGORY_ATTRIBUTE_UNIT',
-                    'PRICE_LIST'
-                )
-                """, Long.class);
-        return revision == null ? 0L : revision;
-    }
-
     public ProductImportCandidate resolve(ProductImportCandidate candidate) {
         ObjectNode aggregate = candidate.aggregate().deepCopy();
         List<String> warnings = new ArrayList<>(candidate.warnings());
